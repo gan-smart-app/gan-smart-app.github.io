@@ -1,0 +1,17 @@
+rules_version = '2';
+
+// Owner-only access for the single private account
+// (Firebase console → Authentication → Users → User UID). Everyone else,
+// signed in or not, is denied everything.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/items/{item} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == '0GNpVJpMvGewBHYs66ylyoO9L9h1'
+        && uid == request.auth.uid;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

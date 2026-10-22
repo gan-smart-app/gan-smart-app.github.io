@@ -1,0 +1,36 @@
+{
+  "name": "gan-smart",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5180",
+    "build": "vite build && node scripts/check-bundle.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 5181",
+    "test": "node --test tests/*.test.mjs",
+    "test:v15": "cd vendor/gan-v15 && node test-connection.mjs && node test-legacy.mjs && node test-app-ui.mjs",
+    "verify:v15": "node scripts/verify-v15.mjs",
+    "check": "npm test && npm run test:v15 && npm run verify:v15 && npm run build"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.1.0",
+    "@fortawesome/fontawesome-free": "^6.4.0",
+    "cubejs": "^1.3.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.180.0",
+    "vazirmatn": "^33.0.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.2.0",
+    "autoprefixer": "^10.6.1",
+    "fake-indexeddb": "^6.2.6",
+    "playwright-core": "^1.64.1",
+    "postcss": "^8.5.31",
+    "tailwindcss": "^3.4.19",
+    "vite": "^7.3.7"
+  }
+}

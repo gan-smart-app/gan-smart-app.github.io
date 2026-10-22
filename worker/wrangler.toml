@@ -1,0 +1,37 @@
+# Optional Claude analysis proxy for GAN SMART. Deploy from this folder:
+#   npx wrangler@4 deploy
+# Secrets (never in this file, never in the app):
+#   npx wrangler@4 secret put ANTHROPIC_API_KEY
+name = "gan-smart-ai"
+main = "index.mjs"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Replace with the exact HTTPS origin of the app (no trailing slash).
+ALLOWED_ORIGIN = "https://YOUR-APP-ORIGIN"
+# Firebase project id and the owner's Firebase Auth UID (filled in after the Firebase project exists).
+FIREBASE_PROJECT_ID = ""
+OWNER_UID = ""
+MODEL = "claude-sonnet-5-5"
+AI_DAILY_REQUESTS = "10"
+AI_MONTHLY_REQUESTS = "100"
+AI_DAILY_USD = "0.50"
+AI_MONTHLY_USD = "5"
+AI_MAX_INPUT_CHARS = "6000"
+AI_MIN_INTERVAL_SEC = "3"
+AI_TIMEOUT_MS = "45000"
+# Claude Sonnet 5.5 list prices, USD per million tokens (checked 2026-10-22).
+PRICE_INPUT_PER_MTOK = "2"
+PRICE_OUTPUT_PER_MTOK = "10"
+PRICE_CACHE_WRITE_PER_MTOK = "2.5"
+PRICE_CACHE_READ_PER_MTOK = "0.1"
+
+[[durable_objects.bindings]]
+name = "AI_BUDGET"
+class_name = "AiBudget"
+
+# SQLite-backed Durable Objects are available on the Workers Free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AiBudget"]
