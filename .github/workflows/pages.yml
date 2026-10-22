@@ -1,7 +1,6 @@
 # Builds the static app and publishes it to GitHub Pages (HTTPS, own origin).
 # Repository variables (Settings → Secrets and variables → Actions → Variables):
 #   FIREBASE_API_KEY, FIREBASE_PROJECT_ID  (Firebase web config; not secrets)
-#   AI_ENDPOINT                            (optional Claude proxy URL; leave unset for no AI)
 name: Deploy to GitHub Pages
 on:
   push:
@@ -30,7 +29,6 @@ jobs:
         env:
           VITE_FIREBASE_API_KEY: ${{ vars.FIREBASE_API_KEY }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          VITE_AI_ENDPOINT: ${{ vars.AI_ENDPOINT }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

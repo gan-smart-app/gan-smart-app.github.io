@@ -11,7 +11,7 @@ import { batteryIcon, MobileHeader, MobileNav, SyncPill, syncView } from '../lay
 // ---------- shared practice logic ----------
 function usePracticeModel() {
   const app = useApp();
-  const { practice: p, practiceApi, solver, link, device, live, settings, data, currentSessionId, simulated, simSolves, lastSolveId, actions } = app;
+  const { practice: p, practiceApi, solver, link, device, live, settings, data, currentSessionId, lastSolveId, actions } = app;
   const [busyScramble, setBusyScramble] = useState(false);
 
   const newScramble = useCallback(async () => {
@@ -29,12 +29,11 @@ function usePracticeModel() {
   }, [practiceApi, newScramble]);
 
   const sessionSolves = useMemo(() => {
-    if (simulated) return simSolves;
     return data.solves.filter((s) => s.sessionId === currentSessionId);
-  }, [data.solves, currentSessionId, simulated, simSolves]);
-  const counted = countedSolves(sessionSolves, { includeSimulator: simulated });
+  }, [data.solves, currentSessionId]);
+  const counted = countedSolves(sessionSolves);
   const session = data.sessions.find((s) => s.id === currentSessionId);
-  const last = (simulated ? simSolves : data.solves).find((s) => s.id === lastSolveId);
+  const last = data.solves.find((s) => s.id === lastSolveId);
 
   const active = p.phase === PHASES.solving || p.phase === PHASES.inspecting;
   useNow(active);
@@ -79,7 +78,7 @@ function usePracticeModel() {
     [PHASES.ready]: settings.inspectionEnabled ? 'برای بازرسی Space را بزن یا تایمر را لمس کن؛ اولین حرکت حل، زمان‌گیری را آغاز می‌کند.' : 'با اولین حرکت حل، زمان‌گیری آغاز می‌شود',
     [PHASES.inspecting]: 'اولین حرکت تایمر را شروع می‌کند',
     [PHASES.solving]: 'حل کامل، تایمر را متوقف و نتیجه را ذخیره می‌کند.',
-    [PHASES.done]: simulated ? 'حل شبیه‌ساز ذخیره نمی‌شود.' : '',
+    [PHASES.done]: '',
     [PHASES.invalid]: p.message,
   }[p.phase];
 
@@ -91,7 +90,7 @@ function usePracticeModel() {
   };
 
   return {
-    app, p, practiceApi, link, device, live, settings, actions, data, session, counted, sessionSolves, last, simulated,
+    app, p, practiceApi, link, device, live, settings, actions, data, session, counted, sessionSolves, last,
     display, inspectionText, status, sub, tokens, cursor, offPath, busyScramble, newScramble, primary,
   };
 }
@@ -104,7 +103,7 @@ function useShortcuts(m) {
       if (e.code === 'Space') { e.preventDefault(); m.primary(); }
       else if (e.key === 'Escape') m.practiceApi.cancel();
       else if (e.key === 'n' || e.key === 'N') m.newScramble();
-      else if (e.key === 'f' || e.key === 'F') { if (!m.simulated) m.practiceApi.state.mode === 'free' ? m.newScramble() : m.practiceApi.startFree(); }
+      else if (e.key === 'f' || e.key === 'F') { if (m.practiceApi.state.mode === 'free') m.newScramble(); else m.practiceApi.startFree(); }
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -166,15 +165,14 @@ function ResultActions({ m, compact = false }) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   if (m.p.phase !== PHASES.done || !s) return null;
-  const sim = m.simulated;
-  const setPenalty = (penalty) => !sim && m.actions.updateSolve(s.id, { penalty: s.penalty === penalty ? null : penalty });
+  const setPenalty = (penalty) => m.actions.updateSolve(s.id, { penalty: s.penalty === penalty ? null : penalty });
   const btn = compact ? 'flex-1 py-2 bg-white/5 rounded-lg text-xs hover:bg-white/10 transition-colors' : 'px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-sm hover:bg-white/10 transition-all';
   return (
     <div className={compact ? 'flex gap-2 mt-3 flex-wrap' : 'flex gap-3 justify-center flex-wrap mt-6'}>
-      {!sim && <button className={btn + (s.penalty === '+2' ? ' text-amber-300 border-amber-400/40' : '')} aria-pressed={s.penalty === '+2'} onClick={() => setPenalty('+2')}>+2</button>}
-      {!sim && <button className={btn + ' text-red-400' + (s.penalty === 'DNF' ? ' border-red-400/40' : '')} aria-pressed={s.penalty === 'DNF'} onClick={() => setPenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'ثبت DNF'}</button>}
-      {!sim && <button className={btn} onClick={() => { setNote(s.note || ''); setNoteOpen(true); }}><i className="fa-regular fa-note-sticky ml-1"></i>یادداشت</button>}
-      {!sim && <a className={btn + ' text-center'} href={'#/solve/' + s.id}><i className="fa-solid fa-play ml-1"></i>بازپخش</a>}
+      <button className={btn + (s.penalty === '+2' ? ' text-amber-300 border-amber-400/40' : '')} aria-pressed={s.penalty === '+2'} onClick={() => setPenalty('+2')}>+2</button>
+      <button className={btn + ' text-red-400' + (s.penalty === 'DNF' ? ' border-red-400/40' : '')} aria-pressed={s.penalty === 'DNF'} onClick={() => setPenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'ثبت DNF'}</button>
+      <button className={btn} onClick={() => { setNote(s.note || ''); setNoteOpen(true); }}><i className="fa-regular fa-note-sticky ml-1"></i>یادداشت</button>
+      <a className={btn + ' text-center'} href={'#/solve/' + s.id}><i className="fa-solid fa-circle-info ml-1"></i>جزئیات</a>
       <button className={btn + ' text-cyan-300'} onClick={m.primary}>حل بعدی</button>
       <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title="یادداشت این حل">
         <textarea className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm min-h-[120px]" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} aria-label="یادداشت" />
@@ -220,9 +218,6 @@ function ConnectCta({ m, className = '' }) {
   if (m.p.phase !== PHASES.noCube) return null;
   const busy = m.device.status === 'selecting' || m.device.status === 'connecting';
   if (m.device.status === 'recovering') return <p className={'text-xs text-amber-300 ' + className}><i className="fa-solid fa-spinner animate-spin ml-1"></i>بازیابی خودکار اتصال…</p>;
-  if (m.simulated) {
-    return <button className={'px-6 py-3 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-200 font-bold text-sm ' + className} onClick={() => m.link.connect()}>روشن‌کردن شبیه‌ساز</button>;
-  }
   if (!m.app.support.ok) return <a href="#/connection" className={'text-xs text-amber-300 underline ' + className}>{m.app.support.text}</a>;
   return busy
     ? <button className={'px-6 py-3 rounded-xl border border-white/15 bg-white/5 text-sm ' + className} onClick={() => m.link.cancel()}>لغو تلاش اتصال</button>
@@ -274,8 +269,8 @@ export function PracticeDesktop() {
           <div>
             <h2 className="text-slate-400 text-sm mb-1">جلسه فعلی</h2>
             <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">{m.simulated ? 'جلسهٔ شبیه‌ساز' : m.session?.name || 'جلسهٔ تازه'}</span>
-              {!m.simulated && <button className="text-cyan-400 text-sm hover:underline" onClick={() => setPick(true)}>تغییر</button>}
+              <span className="text-xl font-bold">{m.session?.name || 'جلسهٔ تازه'}</span>
+              {<button className="text-cyan-400 text-sm hover:underline" onClick={() => setPick(true)}>تغییر</button>}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -306,7 +301,7 @@ export function PracticeDesktop() {
                 const n = m.sessionSolves.filter((x) => x.valid).indexOf(s) + 1;
                 const isBest = best && s.id === best.id;
                 return (
-                  <a key={s.id} href={m.simulated ? undefined : '#/solve/' + s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-all group">
+                  <a key={s.id} href={'#/solve/' + s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-all group">
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-600">#{fa(n)}</span>
                       <span className={'font-medium timer-font text-sm' + (isBest ? ' text-green-400' : '')}>{resultText(s, { persian: true })}</span>
@@ -344,7 +339,7 @@ export function PracticeDesktop() {
           <CorrectionStrip m={m} />
         </div>
 
-        <div className={'glass-panel rounded-2xl flex-grow flex flex-col items-center justify-center relative min-h-[600px] ' + (m.p.phase === PHASES.invalid ? 'border border-red-500/30' : 'cyber-glow')}>
+        <div className={'glass-panel rounded-2xl flex-grow flex flex-col items-center justify-start relative min-h-[600px] pt-16 pb-8 ' + (m.p.phase === PHASES.invalid ? 'border border-red-500/30' : 'cyber-glow')}>
           <div className="absolute top-6 left-6"><SyncPill /></div>
           <label className="absolute top-6 right-6 flex items-center gap-2 text-xs text-slate-300">
             <input type="checkbox" className="accent-cyan-400 w-4 h-4" checked={m.settings.inspectionEnabled} disabled={m.p.phase === PHASES.solving || m.p.phase === PHASES.inspecting}
@@ -353,7 +348,7 @@ export function PracticeDesktop() {
           </label>
           <div className="text-center z-10 mb-8">
             <button type="button" onClick={timerClick} className="block mx-auto cursor-default" aria-live="off" aria-label={'تایمر ' + m.display}>
-              <div dir="ltr" className={'timer-font text-8xl md:text-[10rem] font-black drop-shadow-[0_0_30px_rgba(255,255,255,0.2)] ' + (m.p.phase === PHASES.solving ? 'text-cyan-300' : m.p.phase === PHASES.inspecting ? 'text-yellow-300' : m.p.phase === PHASES.invalid ? 'text-slate-600' : 'text-white')}>{m.display}</div>
+              <div dir="ltr" style={{ fontSize: 'clamp(4.5rem, 10vw, 10rem)', lineHeight: 1.05, textShadow: '0 0 30px rgba(255,255,255,0.2)' }} className={'timer-font font-black ' + (m.p.phase === PHASES.solving ? 'text-cyan-300' : m.p.phase === PHASES.inspecting ? 'text-yellow-300' : m.p.phase === PHASES.invalid ? 'text-slate-600' : 'text-white')}>{m.display}</div>
             </button>
             {m.p.phase === PHASES.inspecting && <span className="inline-block bg-yellow-500 text-slate-900 text-[10px] font-bold px-2 py-0.5 rounded">بازرسی فعال</span>}
             <p className={'font-medium tracking-widest mt-4 flex items-center justify-center gap-3 ' + (m.p.phase === PHASES.invalid ? 'text-red-400' : 'text-cyan-400')} role="status">
@@ -397,7 +392,7 @@ export function PracticeDesktop() {
 }
 
 export function DesktopFooter() {
-  const { device, simulated } = useApp();
+  const { device } = useApp();
   const ok = device.status === 'ready';
   return (
     <footer id="footer" className="p-6 flex justify-between items-center text-slate-500 text-xs">
@@ -405,11 +400,10 @@ export function DesktopFooter() {
         <span className="px-2 py-1 bg-white/5 rounded border border-white/10" title="میان‌برها">Space: بازرسی/آماده · N: اسکرمبل · F: آزاد · Esc: لغو</span>
       </div>
       <div className="flex items-center gap-6">
-        <a href="#/solver" className="hover:text-white transition-all">راهنمای حل</a>
         <a href="#/settings/privacy" className="hover:text-white transition-all">حریم خصوصی</a>
         <a href="#/connection" className={'flex items-center gap-2 ' + (ok ? 'text-cyan-500/70' : 'text-slate-500')}>
           <i className="fa-solid fa-bolt-lightning"></i>
-          <span>{simulated ? 'شبیه‌ساز' : ok ? 'متصل · وضعیت معتبر' : 'روبیک متصل نیست'}</span>
+          <span>{ok ? 'متصل · وضعیت معتبر' : 'روبیک متصل نیست'}</span>
         </a>
       </div>
     </footer>
@@ -442,7 +436,7 @@ export function PracticeMobile({ route }) {
         end={<>
           <a href="#/settings/data" aria-label={'ذخیره: ' + sv.text} title={sv.text}><i className={'fa-solid ' + sv.icon + ' text-xs ' + (m.app.syncStatus.state === 'synced' ? 'text-cyan' : m.app.syncStatus.state === 'attention' ? 'text-red-400' : 'text-secondary')}></i></a>
           <a href="#/connection" aria-label="مدیریت اتصال" className={'inline-flex items-center justify-center w-11 h-11 ' + (m.device.status === 'ready' ? 'text-cyan' : 'text-secondary')}>
-            <i className={m.simulated ? 'fa-solid fa-flask' : 'fa-brands fa-bluetooth-b'}></i>
+            <i className="fa-brands fa-bluetooth-b"></i>
           </a>
         </>} />
       <main className="mt-16 px-4 space-y-4">
@@ -490,10 +484,9 @@ export function PracticeMobile({ route }) {
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div>
           <button className="w-full mt-3 py-3 px-4 rounded-xl border border-white/15 bg-white/5 text-sm font-medium" disabled={m.p.phase === PHASES.solving}
             onClick={() => (m.p.mode === 'free' ? m.newScramble() : m.practiceApi.startFree())}>{m.p.mode === 'free' ? 'اسکرَمبل هدایت‌شده' : 'تمرین آزاد'}</button>
-          <a href="#/solver" className="flex items-center justify-center border border-white/15 rounded-xl px-3 py-3 mt-3 text-sm">راهنمای حل</a>
         </div>
 
         {m.p.phase === PHASES.inspecting && (
@@ -522,7 +515,7 @@ export function PracticeMobile({ route }) {
             <div className="flex justify-between items-center">
               <div>
                 <div className="text-xs font-bold">پایان معتبر</div>
-                <div className="text-[10px] text-secondary">{m.simulated ? 'شبیه‌ساز · ذخیره نمی‌شود' : sv.text}</div>
+                <div className="text-[10px] text-secondary">{sv.text}</div>
               </div>
               <div className="text-right">
                 <div className="text-xl font-tabular font-bold text-white">{resultText(m.last)}</div>
@@ -539,9 +532,9 @@ export function PracticeMobile({ route }) {
         <div id="stats-summary" className="cyber-panel rounded-2xl p-4 grid grid-cols-2 gap-4">
           <div className="space-y-1">
             <div className="text-[10px] text-secondary">جلسه فعلی</div>
-            <button className="text-sm font-bold flex items-center gap-1 min-h-0 min-w-0" onClick={() => !m.simulated && setPick(true)}>
+            <button className="text-sm font-bold flex items-center gap-1 min-h-0 min-w-0" onClick={() => setPick(true)}>
               <i className="fa-solid fa-moon text-purple-400 text-xs"></i>
-              {m.simulated ? 'جلسهٔ شبیه‌ساز' : m.session?.name || 'جلسهٔ تازه'}
+              {m.session?.name || 'جلسهٔ تازه'}
             </button>
           </div>
           <div className="space-y-1 text-left" dir="ltr">

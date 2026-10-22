@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../app/AppContext.jsx';
 import { aoN, bestSolve, countedSolves, effectiveMs, isCounted, rollingAo } from '../core/stats.mjs';
-import { ALGORITHM_BY_ID } from '../data/algorithms.mjs';
-import { errorRate } from '../core/srs.mjs';
 import TrendChart from '../components/TrendChart.jsx';
 import { Empty } from '../components/ui.jsx';
 import { dateFa, fa, faDigits, msText, resultText, timeFa } from '../app/format.js';
@@ -36,16 +34,10 @@ export function useStatsModel() {
   const improvement = best && prevBest && effectiveMs(best) < effectiveMs(prevBest) ? (1 - effectiveMs(best) / effectiveMs(prevBest)) * 100 : null;
   const kinds = [...new Set(data.solves.map((s) => s.kind))];
   const sessions = data.sessions.map((s) => ({ ...s, solves: data.solves.filter((x) => x.sessionId === s.id) })).filter((s) => s.solves.length).reverse();
-  const cases = data.progress
-    .filter((p) => ALGORITHM_BY_ID[p.id] && p.attempts?.length)
-    .map((p) => ({ id: p.id, name: ALGORITHM_BY_ID[p.id].name, n: p.attempts.length, rate: 1 - errorRate(p, 10), ms: avg(p.attempts.filter((a) => a.ms && a.correct).map((a) => a.ms)) }))
-    .sort((a, b) => a.rate - b.rate)
-    .slice(0, 6);
   const numberOf = (s) => data.solves.indexOf(s) + 1;
-  return { app, data, range, setRange, kind, setKind, session, setSession, list, counted, points, ao5Series, best, improvement, ao5: aoN(chrono, 5), ao12: aoN(chrono, 12), kinds, sessions, cases, numberOf };
+  return { app, data, range, setRange, kind, setKind, session, setSession, list, counted, points, ao5Series, best, improvement, ao5: aoN(chrono, 5), ao12: aoN(chrono, 12), kinds, sessions, numberOf };
 }
 
-const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 
 function statusOf(s) {
   if (!s.valid) return ['نامعتبر', 'text-slate-500'];
@@ -154,23 +146,6 @@ function Desktop() {
         </div>
         <div className="space-y-8">
           <section className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="font-bold mb-6 text-sm flex items-center gap-2"><i className="fa-solid fa-microchip text-accent-purple"></i>عملکرد کیس‌ها</h3>
-            {m.cases.length === 0 ? <p className="text-xs text-slate-500">هنوز تمرین کیسی ثبت نشده است.</p> : (
-              <div className="space-y-4">
-                {m.cases.map((c) => (
-                  <a key={c.id} href={'#/lesson/' + c.id} className="flex justify-between items-center">
-                    <span className="text-xs">{c.name}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={'text-[10px] ' + (c.rate >= 0.8 ? 'text-green-400' : 'text-yellow-400')}>{faDigits(Math.round(c.rate * 100))}٪ درست{c.ms ? ' · ' + faDigits((c.ms / 1000).toFixed(1)) + 'ث' : ''}</span>
-                      <div className="w-16 h-1.5 bg-slate-900 rounded-full overflow-hidden"><div className={(c.rate >= 0.8 ? 'bg-green-400' : 'bg-yellow-400') + ' h-full'} style={{ width: Math.round(c.rate * 100) + '%' }}></div></div>
-                    </div>
-                  </a>
-                ))}
-                <p className="text-[10px] text-slate-500">بر اساس ۱۰ اجرای اخیر هر کیس.</p>
-              </div>
-            )}
-          </section>
-          <section className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
             <h3 className="font-bold mb-6 text-sm">جلسات تمرینی</h3>
             {m.sessions.length === 0 ? <p className="text-xs text-slate-500">هنوز جلسه‌ای با حل ثبت نشده است.</p> : (
               <div className="space-y-3">
@@ -185,7 +160,6 @@ function Desktop() {
                         <span className="text-[10px] text-slate-500">{dateFa(s.createdAt)}</span>
                       </div>
                       <p className="text-[10px] text-slate-400">{fa(s.solves.length)} حل{a5 != null ? ' - Ao5: ' + msText(a5, { persian: true }) : ''}{c.length && a5 == null ? ' - بهترین: ' + resultText(bestSolve(c), { persian: true }) : ''}</p>
-                      {m.app.aiEnabled && <a href={'#/analysis/' + s.id} className="text-[10px] text-purple-300 mt-1 inline-block" onClick={(e) => e.stopPropagation()}>تحلیل هوشمند جلسه</a>}
                     </button>
                   );
                 })}
@@ -267,16 +241,6 @@ function Mobile({ route }) {
             </a>
           ))}
         </section>
-        {m.app.aiEnabled && m.sessions.length > 0 && (
-          <section className="space-y-2">
-            <h3 className="text-xs font-bold border-r-2 border-purple-500 pr-2">تحلیل هوشمند جلسه‌ها</h3>
-            {m.sessions.slice(0, 5).map((s) => (
-              <a key={s.id} href={'#/analysis/' + s.id} className="cyber-panel p-3 rounded-xl flex justify-between text-xs">
-                <span>{s.name} · {dateFa(s.createdAt)}</span><span className="text-secondary">{fa(s.solves.length)} حل</span>
-              </a>
-            ))}
-          </section>
-        )}
         <p className="text-xs text-secondary">زمان‌ها بر پایهٔ دریافت حرکت در مرورگرند؛ تفکیک مرحله یا مکث بدون شواهد کافی نمایش داده نمی‌شود.</p>
       </main>
       <MobileNav route="stats" />

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/AppContext.jsx';
 import { exportBackup, backupFileName, previewImport, applyImport } from '../core/backup.mjs';
-import { FRAMES } from '../core/cube.mjs';
 import { download, Modal } from '../components/ui.jsx';
 import { ago, fa, faDigits, msText, resultText, dateFa } from '../app/format.js';
 import { MobileHeader, MobileNav, syncView } from '../layout/Shell.jsx';
@@ -158,21 +157,6 @@ function PracticeRows({ m, rowCls, mobile }) {
         </div>
       </div>
       {m.goalError && <p className="text-xs text-red-400" role="alert">{m.goalError}</p>}
-      <div className={rowCls}>{label('راهنمای حرکت بعدی', 'در درس‌ها و تمرین الگوریتم؛ انتخاب شما ذخیره می‌شود')}<Toggle on={s.nextMoveHint} onChange={(v) => set({ nextMoveHint: v })} label="راهنمای حرکت بعدی" /></div>
-      <div className={rowCls}>{label('جهت نگه‌داشتن در آموزش', 'الگوریتم‌های لایهٔ آخر برای زرد بالا نوشته شده‌اند')}
-        <select value={s.holdFrame} onChange={(e) => set({ holdFrame: e.target.value })} className="bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-sm" aria-label="جهت نگه‌داشتن">
-          {Object.values(FRAMES).map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-        </select>
-      </div>
-      <div className={rowCls}>{label('سختی و تکرار تمرین هدفمند', 'پیش‌فرض تمرین‌های چالش')}
-        <div className="flex items-center gap-2">
-          <select value={s.drillDifficulty} onChange={(e) => set({ drillDifficulty: e.target.value })} className="bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-sm" aria-label="سختی">
-            <option value="easy">آسان</option><option value="medium">متوسط</option><option value="hard">سخت</option>
-          </select>
-          <input type="number" min={1} max={50} value={s.drillRepetitions} onChange={(e) => set({ drillRepetitions: Math.max(1, Math.min(50, Number(e.target.value) || 10)) })}
-            className="w-16 bg-slate-900 border border-slate-700 rounded-lg py-1 px-2 text-center text-sm" aria-label="تعداد تکرار" />
-        </div>
-      </div>
     </>
   );
 }
@@ -307,89 +291,14 @@ function ConflictModal({ m }) {
 }
 const strip = (r) => { if (!r) return r; const { rev, updatedAt, ...rest } = r; return rest; };
 
-function AiBody({ m, mobile }) {
-  const { ai, aiStatus, authState, refreshAi, settings, actions } = m.app;
-  const box = mobile ? 'cyber-panel p-5 rounded-2xl space-y-4' : 'bg-purple-500/5 border border-purple-500/20 rounded-3xl p-8 space-y-6';
-  const [limits, setLimits] = useState({});
-  const [saving, setSaving] = useState('');
-  const available = ai?.aiAvailable();
-  useEffect(() => { setLimits(aiStatus.limits || {}); }, [aiStatus.limits]);
-  if (!available) {
-    return (
-      <div className={box}>
-        <h3 className="font-bold">بدون کلید: غیرفعال</h3>
-        <p className="text-sm text-slate-300 leading-7">تمام تمرین‌ها و آموزش‌ها فعال‌اند. هیچ درخواست یا عنصر هوشواره خارج از همین بخش نمایش داده نمی‌شود و صفر درخواست به Anthropic فرستاده می‌شود.</p>
-        <p className="text-xs text-slate-400 leading-6">کلید فقط سمت سرور نگه‌داری می‌شود، نه در مرورگر. برای فعال‌سازی: سرویس کوچک Cloudflare Worker همراه پروژه مستقر و کلید با <code dir="ltr">wrangler secret put ANTHROPIC_API_KEY</code> روی سرور ذخیره شود؛ سپس نشانی آن در تنظیم ساخت (VITE_AI_ENDPOINT) قرار گیرد. راهنما: docs/AI_FA.md</p>
-      </div>
-    );
-  }
-  if (authState.status !== 'signedIn') return <div className={box}><p className="text-sm text-slate-300">برای بررسی وضعیت هوشواره ابتدا وارد حساب شخصی شو؛ درخواست‌ها فقط از سرور احراز هویت‌شده انجام می‌شوند.</p></div>;
-  const st = aiStatus;
-  const canSet = typeof ai.setLimits === 'function';
-  const saveLimits = async () => {
-    setSaving('…');
-    try { await ai.setLimits(limits); await refreshAi(); setSaving('ذخیره شد'); } catch (e) { setSaving(e.message); }
-  };
-  return (
-    <div className={box}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={'w-2 h-2 rounded-full ' + (st.configured ? 'bg-green-500' : 'bg-slate-500')}></div>
-          <span className={'text-xs font-bold ' + (st.configured ? 'text-green-400' : 'text-slate-300')}>{st.configured ? 'کلید ذخیره‌شده در سرور · پوشانده' : 'کلید روی سرور تنظیم نشده یا در دسترس نیست'}</span>
-        </div>
-        <button className="text-[10px] text-cyan-300 underline" onClick={refreshAi}>بررسی دوباره</button>
-      </div>
-      {st.maskedKey && <div className="text-[10px] font-mono text-slate-400 bg-black/40 p-2 rounded" dir="ltr">{st.maskedKey}</div>}
-      {st.message && !st.configured && <p className="text-xs text-amber-300">{st.message}</p>}
-      {st.configured && (
-        <>
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div><p className="text-[10px] text-slate-500">مدل (تنظیم سرور)</p><p className="font-bold" dir="ltr">{st.model}</p></div>
-            <div><p className="text-[10px] text-slate-500">مصرف امروز / این ماه</p><p className="font-bold">{fa(st.usage?.today?.requests ?? 0)} / {fa(st.usage?.month?.requests ?? 0)} درخواست</p></div>
-            <div><p className="text-[10px] text-slate-500">توکن ماه (ورودی/خروجی/کش)</p><p className="font-bold" dir="ltr">{st.usage?.month?.input ?? 0} / {st.usage?.month?.output ?? 0} / {(st.usage?.month?.cacheRead ?? 0) + (st.usage?.month?.cacheWrite ?? 0)}</p></div>
-            <div><p className="text-[10px] text-slate-500">هزینهٔ تخمینی ماه</p><p className="font-bold text-green-400">{st.usage?.month?.usd != null ? '$' + Number(st.usage.month.usd).toFixed(4) : 'پس از ثبت مصرف'}</p></div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div><p className="text-sm font-bold">تحلیل خودکار پایان جلسه</p><p className="text-[10px] text-slate-500">خاموش: فقط درخواست دستی. روشن: حداکثر یک درخواست برای هر نسخهٔ نهایی جلسه.</p></div>
-            <Toggle on={settings.aiAutoSession} onChange={(v) => actions.saveSettings({ aiAutoSession: v })} label="تحلیل خودکار پایان جلسه" />
-          </div>
-          <div className="pt-4 border-t border-slate-800 space-y-3">
-            <h4 className="text-xs font-bold text-slate-500">بودجه و سقف (اعمال در سرور)</h4>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              {[['dailyUsd', 'بودجهٔ روزانه ($)'], ['monthlyUsd', 'بودجهٔ ماهانه ($)'], ['dailyRequests', 'سقف درخواست روزانه'], ['monthlyRequests', 'سقف درخواست ماهانه']].map(([k, l]) => (
-                <label key={k}>{l}
-                  <input type="number" min={0} step="any" value={limits[k] ?? ''} disabled={!canSet} onChange={(e) => setLimits({ ...limits, [k]: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="w-full bg-slate-900 border border-slate-700 p-2 rounded-lg mt-1" dir="ltr" />
-                  {st.ceilings?.[k] != null && <span className="text-[10px] text-slate-500">حداکثر سرور: {st.ceilings[k]}</span>}
-                </label>
-              ))}
-            </div>
-            {canSet && <button className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800 text-sm" onClick={saveLimits}>ذخیرهٔ سقف‌ها</button>}
-            {saving && <span className="text-xs text-slate-400 mr-2">{saving}</span>}
-          </div>
-        </>
-      )}
-      <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 flex items-start gap-4">
-        <i className="fa-solid fa-circle-info text-slate-500 mt-1"></i>
-        <p className="text-[10px] text-slate-500 leading-relaxed">فعال‌سازی هوشواره کاملاً اختیاری است. هیچ داده‌ای بدون درخواست صریح شما ارسال نمی‌شود و فقط خلاصهٔ آماری لازم فرستاده می‌شود. مصرف واقعی از پاسخ سرور ثبت می‌شود و هزینهٔ تخمینی صورتحساب قطعی نیست. تغییر خودکار به مدل گران‌تر انجام نمی‌شود.</p>
-      </div>
-    </div>
-  );
-}
-
 function InterfaceBody({ m, mobile }) {
-  const { simulated, actions } = m.app;
   return (
     <div className={mobile ? 'cyber-panel rounded-2xl divide-y divide-white/5' : 'p-5 bg-slate-800/30 rounded-2xl border border-slate-700 space-y-4'}>
       <div className={'flex items-center justify-between gap-4 ' + (mobile ? 'p-4' : '')}>
         <div><p className="text-sm">کاهش حرکت رابط</p><p className="text-[10px] text-slate-500">چرخش‌های نمایشی مکعب و جلوه‌ها حذف می‌شوند (تنظیم سیستم هم رعایت می‌شود).</p></div>
         <Toggle on={m.settings.reduceMotion} onChange={(v) => m.actions.saveSettings({ reduceMotion: v })} label="کاهش حرکت" />
       </div>
-      <div className={'flex items-center justify-between gap-4 ' + (mobile ? 'p-4' : '')}>
-        <div><p className="text-sm text-amber-200">حالت شبیه‌ساز</p><p className="text-[10px] text-slate-500">مکعب مجازی با کیبورد/دکمه برای آزمایش بدون روبیک؛ همیشه با برچسب نمایش داده می‌شود، اتصال واقعی نیست و حل‌هایش ذخیره نمی‌شود.</p></div>
-        <Toggle on={simulated} onChange={(v) => actions.setSimulated(v)} label="حالت شبیه‌ساز" />
-      </div>
-      {!mobile && <p className="text-sm text-slate-300">میان‌برهای صفحهٔ تمرین: <kbd dir="ltr">Space</kbd> بازرسی/آماده، <kbd dir="ltr">N</kbd> اسکرَمبل جدید، <kbd dir="ltr">F</kbd> تمرین آزاد، <kbd dir="ltr">Esc</kbd> لغو تلاش. {simulated && <>شبیه‌ساز: <kbd dir="ltr">i k</kbd> R/R′، <kbd dir="ltr">d e</kbd> L/L′، <kbd dir="ltr">j f</kbd> U/U′، <kbd dir="ltr">s l</kbd> D/D′، <kbd dir="ltr">h g</kbd> F/F′، <kbd dir="ltr">w o</kbd> B/B′.</>}</p>}
+      {!mobile && <p className="text-sm text-slate-300">میان‌برهای صفحهٔ تمرین: <kbd dir="ltr">Space</kbd> بازرسی/آماده، <kbd dir="ltr">N</kbd> اسکرَمبل جدید، <kbd dir="ltr">F</kbd> تمرین آزاد، <kbd dir="ltr">Esc</kbd> لغو تلاش.</p>}
       <p className={'text-sm text-slate-300 ' + (mobile ? 'p-4' : '')}>فارسی · راست‌به‌چپ؛ حرکت‌ها مستقل و چپ‌به‌راست.</p>
     </div>
   );
@@ -399,13 +308,13 @@ function Privacy() {
   return (
     <div className="p-5 bg-slate-800/30 rounded-2xl border border-slate-700 space-y-2 text-sm text-slate-300 leading-7">
       <p>داده‌ها متعلق به حساب شخصی شماست و فقط با قواعد دسترسی مالک خوانده و نوشته می‌شوند. بدون ورود، همه‌چیز فقط در همین مرورگر می‌ماند.</p>
-      <p>خروجی پشتیبان و گزارش اتصال، رمز، توکن، کلید یا شناسهٔ بلوتوث ندارند. هوشواره فقط با پیکربندی و درخواست شما، خلاصهٔ لازم را می‌فرستد.</p>
+      <p>خروجی پشتیبان و گزارش اتصال، رمز، توکن، کلید یا شناسهٔ بلوتوث ندارند. </p>
     </div>
   );
 }
 
 // ---------- layouts ----------
-const SECTIONS = [['account', 'حساب کاربری', 'fa-user'], ['practice', 'تنظیمات تمرین', 'fa-stopwatch'], ['interface', 'رابط کاربری', 'fa-desktop'], ['data', 'داده و پشتیبان', 'fa-database'], ['ai', 'پیکربندی هوشواره', 'fa-microchip']];
+const SECTIONS = [['account', 'حساب کاربری', 'fa-user'], ['practice', 'تنظیمات تمرین', 'fa-stopwatch'], ['interface', 'رابط کاربری', 'fa-desktop'], ['data', 'داده و پشتیبان', 'fa-database']];
 
 function Desktop({ section }) {
   const m = useSettingsModel();
@@ -436,13 +345,6 @@ function Desktop({ section }) {
         <section id="set-data" className="space-y-6 scroll-mt-28">
           <h2 className="text-xl font-bold border-b border-slate-800 pb-4">داده و پشتیبان</h2>
           <DataBody m={m} />
-        </section>
-        <section id="set-ai" className="space-y-6 scroll-mt-28">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-            <h2 className="text-xl font-bold accent-purple">پیکربندی هوشواره (اختیاری)</h2>
-            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">اختیاری</span>
-          </div>
-          <AiBody m={m} />
         </section>
         <section id="set-interface" className="space-y-5 scroll-mt-28">
           <h2 className="text-xl font-bold">رابط و دسترس‌پذیری</h2>
@@ -480,10 +382,6 @@ function Mobile() {
         <section id="data-management" className="space-y-4">
           <h2 className="text-sm font-bold border-r-2 border-yellow-500 pr-2">داده و همگام‌سازی</h2>
           <DataBody m={m} mobile />
-        </section>
-        <section id="ai-config" className="space-y-4">
-          <h2 className="text-sm font-bold border-r-2 border-cyan pr-2">پیکربندی هوشواره</h2>
-          <AiBody m={m} mobile />
         </section>
         <section className="cyber-panel rounded-2xl p-4 space-y-3">
           <h3 className="font-bold text-sm text-cyan-300">بلوتوث این مرورگر</h3>

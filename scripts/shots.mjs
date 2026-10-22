@@ -9,7 +9,7 @@ const [out, base, ...rest] = process.argv.slice(2);
 const refIdx = rest.indexOf('--ref');
 const refDir = refIdx >= 0 ? rest[refIdx + 1] : null;
 const routes = (refIdx >= 0 ? rest.slice(0, refIdx) : rest);
-const sizes = { desktop: { width: 1440, height: 1042 }, mobile: { width: 390, height: 844 } };
+const sizes = { desktop: { width: Number(process.env.DW || 1440), height: Number(process.env.DH || 1042) }, mobile: { width: 390, height: 844 } };
 mkdirSync(out, { recursive: true });
 
 const browser = await chromium.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });

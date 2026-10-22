@@ -24,7 +24,7 @@ const EVENT_TEXT = {
 
 function useConnection() {
   const app = useApp();
-  const { link, device, simulated, support, live } = app;
+  const { link, device, support, live } = app;
   const busy = device.status === 'selecting' || device.status === 'connecting';
   const ready = device.status === 'ready';
   const log = (link.log || []).slice(-40).reverse();
@@ -33,12 +33,11 @@ function useConnection() {
   const markSolved = () => {
     if (confirm('آیا هر شش وجه روبیک واقعی کاملاً حل شده است؟ این فرمان فقط برای همگام‌کردن مدل با روبیک حل‌شده است.')) link.markSolved().catch((e) => alert(e.message));
   };
-  return { app, link, device, simulated, support, live, busy, ready, log, exportLog, requestState, markSolved };
+  return { app, link, device, support, live, busy, ready, log, exportLog, requestState, markSolved };
 }
 
 function StatusText({ c }) {
   const d = c.device;
-  if (c.simulated) return <span className="text-amber-300">{d.status === 'ready' ? 'شبیه‌ساز فعال (اتصال واقعی نیست)' : 'شبیه‌ساز خاموش'}</span>;
   if (d.status === 'ready') return <span className="text-green-400">متصل و آماده</span>;
   if (d.status === 'recovering') return <span className="text-amber-300">در حال بازیابی خودکار</span>;
   if (c.busy) return <span className="text-cyan-300">در حال اتصال…</span>;
@@ -79,10 +78,10 @@ function Desktop() {
             <div className="flex items-start justify-between mb-8">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 bg-accent-cyan/10 rounded-full flex items-center justify-center">
-                  <i className={'fa-solid ' + (c.simulated ? 'fa-flask' : 'fa-cube') + ' text-3xl accent-cyan'}></i>
+                  <i className="fa-solid fa-cube text-3xl accent-cyan"></i>
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold">{c.simulated ? 'شبیه‌ساز' : d.deviceName || 'روبیک GAN'}</h2>
+                  <h2 className="text-xl font-bold">{d.deviceName || 'روبیک GAN'}</h2>
                   <p className="text-slate-400 text-sm">وضعیت: <StatusText c={c} /></p>
                 </div>
               </div>
@@ -118,8 +117,8 @@ function Desktop() {
               </div>
             ) : (
               <div className="flex gap-4">
-                <button className="flex-1 bg-cyan-400 hover:bg-cyan-300 text-slate-900 py-3 rounded-xl transition-all font-bold disabled:opacity-40" disabled={!c.simulated && !c.support.ok} onClick={() => c.link.connect()}>
-                  <i className={(c.simulated ? 'fa-solid fa-flask' : 'fa-brands fa-bluetooth-b') + ' ml-2'}></i> {c.simulated ? 'روشن‌کردن شبیه‌ساز' : d.status === 'error' ? 'تلاش مجدد اتصال' : 'اتصال به روبیک'}
+                <button className="flex-1 bg-cyan-400 hover:bg-cyan-300 text-slate-900 py-3 rounded-xl transition-all font-bold disabled:opacity-40" disabled={!c.support.ok} onClick={() => c.link.connect()}>
+                  <i className="fa-brands fa-bluetooth-b ml-2"></i> {d.status === 'error' ? 'تلاش مجدد اتصال' : 'اتصال به روبیک'}
                 </button>
               </div>
             )}
@@ -138,7 +137,7 @@ function Desktop() {
                 <button className="block mt-2 underline" onClick={() => (c.busy ? alert('ابتدا تلاش جاری را لغو کن.') : location.reload())}>تازه‌سازی صفحه</button>
               </div>
             )}
-            {c.ready && !c.simulated && (
+            {c.ready && (
               <div className="mt-4 text-xs text-slate-400 flex flex-wrap gap-3 items-center">
                 <span>اگر نمایش با روبیک فرق دارد: ابتدا «دریافت دوبارهٔ وضعیت»؛ اگر روبیک را کامل حل کرده‌ای و هنوز فرق دارد:</span>
                 <button className="underline text-slate-300" onClick={c.markSolved}>روبیک من کاملاً حل شده است</button>
@@ -163,7 +162,7 @@ function Desktop() {
                 <button className="text-xs bg-accent-cyan text-slate-900 px-4 py-1 rounded-full font-bold" onClick={() => c.link.connect()}>تلاش مجدد</button>
               </div>
             )}
-            {!c.simulated && !c.support.ok && (
+            {!c.support.ok && (
               <div className="bg-slate-800/30 border border-slate-700 rounded-xl p-6 flex flex-col items-center text-center md:col-span-2">
                 <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center mb-4 text-slate-500"><i className="fa-brands fa-chrome"></i></div>
                 <h3 className="font-bold mb-1">مرورگر ناسازگار</h3>
@@ -197,7 +196,7 @@ function Desktop() {
             </div>
             <div className="space-y-3 max-h-48 overflow-y-auto text-xs font-mono pr-2" dir="rtl"><EventLines c={c} /></div>
             <button className="w-full mt-4 text-[10px] text-slate-500 hover:text-white transition-colors border-t border-slate-700 pt-3" onClick={c.exportLog}>خروجی گزارش اتصال (JSON، بدون دادهٔ حساب یا کلید)</button>
-            {!c.simulated && (
+            {(
               <button className="w-full mt-2 text-[10px] text-slate-500 hover:text-white" disabled={c.busy}
                 onClick={async () => { try { const ok = await c.link.forgetDevice(); alert(ok ? 'مجوز این روبیک برای این سایت حذف شد.' : 'ابتدا یک بار به روبیک وصل شو.'); } catch (e) { alert(e.message); } }}>
                 حذف مجوز بلوتوث این روبیک در همین مرورگر
@@ -206,7 +205,7 @@ function Desktop() {
           </details>
         </div>
       </div>
-      <PageFooter links={[['#/solver', 'راهنما'], ['#/settings/privacy', 'حریم خصوصی']]} />
+      <PageFooter links={[['#/practice', 'تمرین'], ['#/settings/privacy', 'حریم خصوصی']]} />
     </main>
   );
 }
@@ -221,13 +220,13 @@ function Mobile({ route }) {
       <main className="mt-16 px-4 space-y-6">
         <div className="text-center py-4">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 border border-cyan-400/20 bg-cyan-400/10">
-            <i className={(c.simulated ? 'fa-solid fa-flask' : 'fa-brands fa-bluetooth') + ' text-cyan text-3xl' + (c.busy ? ' animate-pulse' : '')}></i>
+            <i className={'fa-brands fa-bluetooth text-cyan text-3xl' + (c.busy ? ' animate-pulse' : '')}></i>
           </div>
           <h2 className="text-lg font-bold">{title}</h2>
           <p className="text-xs text-secondary mt-1" role="status">{d.message || 'مطمئن شوید بلوتوث دستگاه روشن است.'}</p>
         </div>
 
-        {!c.simulated && !c.support.ok && (
+        {!c.support.ok && (
           <div id="browser-warning" className="cyber-panel p-4 rounded-xl border-yellow-500/30 bg-yellow-500/5">
             <div className="flex items-start gap-3">
               <i className="fa-solid fa-circle-exclamation text-yellow-500 mt-1"></i>
@@ -245,7 +244,7 @@ function Mobile({ route }) {
             <div className="cyber-panel p-3 rounded-lg flex items-center justify-between border-green-500/30">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                <span className="text-xs font-bold">{c.simulated ? 'شبیه‌ساز' : d.deviceName || 'روبیک GAN'} · آماده حل</span>
+                <span className="text-xs font-bold">{d.deviceName || 'روبیک GAN'} · آماده حل</span>
                 {d.battery != null && <span className="text-[10px] text-secondary">{fa(d.battery)}٪</span>}
               </div>
               <button className="text-[10px] text-red-400" onClick={() => c.link.disconnect()}>قطع دستی</button>
@@ -256,12 +255,12 @@ function Mobile({ route }) {
               <button className="w-full py-1.5 bg-white/5 rounded text-[10px]" onClick={() => c.link.cancel()}>لغو</button>
             </div>
           ) : (
-            <button className="w-full flex items-center justify-between p-4 cyber-panel rounded-xl hover:border-cyan transition-colors disabled:opacity-40" disabled={!c.simulated && !c.support.ok} onClick={() => c.link.connect()}>
+            <button className="w-full flex items-center justify-between p-4 cyber-panel rounded-xl hover:border-cyan transition-colors disabled:opacity-40" disabled={!c.support.ok} onClick={() => c.link.connect()}>
               <div className="flex items-center gap-3">
-                <i className={'fa-solid ' + (c.simulated ? 'fa-flask' : 'fa-cube') + ' text-cyan'}></i>
+                <i className="fa-solid fa-cube text-cyan"></i>
                 <div className="text-right">
-                  <div className="text-sm font-bold">{c.simulated ? 'شبیه‌ساز' : 'روبیک GAN'}</div>
-                  <div className="text-[10px] text-secondary">{c.simulated ? 'اتصال واقعی نیست' : 'انتخاب دستگاه در پنجرهٔ مرورگر'}</div>
+                  <div className="text-sm font-bold">روبیک GAN</div>
+                  <div className="text-[10px] text-secondary">انتخاب دستگاه در پنجرهٔ مرورگر</div>
                 </div>
               </div>
               <div className="text-[10px] bg-cyan-400/20 text-cyan px-2 py-1 rounded">{d.status === 'error' ? 'تلاش مجدد' : 'اتصال'}</div>
@@ -279,7 +278,7 @@ function Mobile({ route }) {
           {d.pickerHint && !c.ready && (
             <p className="text-[11px] text-amber-200">اگر پنجرهٔ انتخاب ظاهر نشد، لغو کن و دوباره بزن؛ اگر باز هم نشد صفحه را تازه کن.</p>
           )}
-          {c.ready && !c.simulated && (
+          {c.ready && (
             <div className="grid grid-cols-2 gap-2">
               <button className="py-3 rounded-xl border border-white/15 bg-white/5 text-xs" onClick={c.requestState}>دریافت دوبارهٔ وضعیت</button>
               <button className="py-3 rounded-xl border border-white/15 bg-white/5 text-xs" onClick={c.markSolved}>روبیکم کامل حل است</button>

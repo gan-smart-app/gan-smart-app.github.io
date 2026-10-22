@@ -1,15 +1,11 @@
-import { useEffect, useState } from 'react';
 import { useApp } from '../app/AppContext.jsx';
-import { SIM_KEYS } from '../app/sim.js';
 import { fa } from '../app/format.js';
 
 const NAV = [
   ['practice', 'تمرین', 'fa-stopwatch'],
-  ['learn', 'یادگیری', 'fa-graduation-cap'],
-  ['challenges', 'چالش‌ها', 'fa-trophy'],
   ['stats', 'آمار', 'fa-chart-line'],
 ];
-const SECTION = { practice: 'practice', solver: 'practice', learn: 'learn', library: 'learn', lesson: 'learn', challenges: 'challenges', drill: 'challenges', stats: 'stats', solve: 'stats', analysis: 'stats' };
+const SECTION = { practice: 'practice', stats: 'stats', solve: 'stats' };
 export const sectionOf = (route) => SECTION[route] || null;
 
 export function batteryIcon(level) {
@@ -21,8 +17,7 @@ export function batteryIcon(level) {
   return 'fa-battery-empty';
 }
 
-export function deviceSummary(device, simulated) {
-  if (simulated) return { label: 'شبیه‌ساز', dot: device.status === 'ready' ? 'bg-amber-400' : 'bg-slate-500', text: device.status === 'ready' ? 'شبیه‌ساز فعال' : 'شبیه‌ساز خاموش' };
+export function deviceSummary(device) {
   switch (device.status) {
     case 'ready': return { label: 'روبیک GAN', dot: 'bg-green-500', text: 'متصل · وضعیت معتبر' };
     case 'recovering': return { label: 'روبیک GAN', dot: 'bg-amber-400', text: 'در حال بازیابی اتصال' };
@@ -33,9 +28,9 @@ export function deviceSummary(device, simulated) {
 }
 
 export function DesktopHeader({ route }) {
-  const { device, simulated, authState } = useApp();
+  const { device, authState } = useApp();
   const active = sectionOf(route);
-  const d = deviceSummary(device, simulated);
+  const d = deviceSummary(device);
   return (
     <header id="header" className="h-20 border-b border-white/5 glass-panel sticky top-0 z-50 flex items-center px-8 justify-between">
       <div className="flex items-center gap-10">
@@ -61,7 +56,7 @@ export function DesktopHeader({ route }) {
             <span className="text-xs font-bold text-cyan-400">{device.status === 'ready' && device.battery != null ? fa(device.battery) + '٪' : device.status === 'ready' ? 'متصل' : d.text.split(' ·')[0]}</span>
           </div>
           <div className="relative">
-            <i className={'fa-solid ' + (simulated ? 'fa-flask' : device.status === 'ready' ? batteryIcon(device.battery) : 'fa-bluetooth-b fa-brands') + ' text-cyan-400 text-lg'}></i>
+            <i className={(device.status === 'ready' ? 'fa-solid ' + batteryIcon(device.battery) : 'fa-brands fa-bluetooth-b') + ' text-cyan-400 text-lg'}></i>
             <span className={'absolute -top-1 -right-1 w-2 h-2 rounded-full border border-[#050508] ' + d.dot}></span>
           </div>
         </a>
@@ -130,36 +125,6 @@ export function SyncPill({ className = '' }) {
       <div className={'w-1.5 h-1.5 rounded-full ' + v.dot}></div>
       <span className="text-[10px] font-bold">{v.text + extra}</span>
     </a>
-  );
-}
-
-export function SimBadge() {
-  const { simulated, sim, device } = useApp();
-  const [pad, setPad] = useState(false);
-  useEffect(() => {
-    if (!simulated) return undefined;
-    const on = (e) => {
-      if (e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.('input, textarea, select, dialog')) return;
-      const mv = SIM_KEYS[e.key];
-      if (mv) { e.preventDefault(); sim.turn(mv); }
-    };
-    window.addEventListener('keydown', on);
-    return () => window.removeEventListener('keydown', on);
-  }, [simulated, sim]);
-  if (!simulated) return null;
-  return (
-    <div className="fixed bottom-24 lg:bottom-6 left-4 z-[60] flex flex-col items-start gap-2">
-      {pad && device.status === 'ready' && (
-        <div className="grid grid-cols-6 gap-1 p-2 rounded-xl bg-[#101019] border border-amber-500/40" dir="ltr" aria-label="دکمه‌های حرکت شبیه‌ساز">
-          {['U', 'R', 'F', 'D', 'L', 'B'].flatMap((f) => [f, f + "'"]).map((mv) => (
-            <button key={mv} className="move-font w-11 h-11 rounded-lg bg-white/5 text-amber-200 text-sm" onClick={() => sim.turn(mv)}>{mv}</button>
-          ))}
-        </div>
-      )}
-      <button className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-bold" role="status" onClick={() => setPad(!pad)} title="نمایش دکمه‌های حرکت">
-        <i className="fa-solid fa-flask ml-1"></i>حالت شبیه‌ساز · اتصال واقعی نیست
-      </button>
-    </div>
   );
 }
 
