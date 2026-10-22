@@ -58,9 +58,9 @@ const CubeView = forwardRef(function CubeView(
     controls.enablePan = false;
     controls.minDistance = 5;
     controls.maxDistance = 14;
-    scene.add(new THREE.AmbientLight(0xffffff, 0.8 * Math.PI));
-    const light = new THREE.DirectionalLight(0xffffff, 0.5 * Math.PI);
-    light.position.set(10, 10, 10);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75 * Math.PI));
+    const light = new THREE.DirectionalLight(0xffffff, 0.6 * Math.PI);
+    light.position.set(6, 12, 8);
     scene.add(light);
 
     const root = new THREE.Group();
@@ -183,7 +183,7 @@ const CubeView = forwardRef(function CubeView(
     <div
       ref={host}
       className={'cube-stage relative ' + className}
-      style={{ height, opacity: dim ? 0.45 : 1 }}
+      style={{ height, opacity: dim ? 0.6 : 1, transition: 'opacity .3s' }}
       role="img"
       aria-label={label || 'نمای سه‌بعدی مکعب؛ چرخاندن نما فقط دوربین را تغییر می‌دهد'}
     />

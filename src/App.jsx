@@ -39,7 +39,7 @@ function Frame() {
   );
   if (mobile) return body;
   return (
-    <div className="desk min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col">
       {!FOCUSED.has(name) && <DesktopHeader route={name} />}
       {body}
       {name === 'practice' || !name ? <DesktopFooter /> : null}

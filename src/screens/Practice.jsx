@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../app/AppContext.jsx';
 import { PHASES, INSPECTION_GRACE_MS } from '../core/practice.mjs';
-import { aoN, bestSolve, countedSolves, effectiveMs } from '../core/stats.mjs';
+import { aoN, bestSolve, countedSolves } from '../core/stats.mjs';
 import { parseAlg, stateFromAlg, toFacelets } from '../core/cube.mjs';
 import CubeView from '../components/CubeView.jsx';
-import { Alg, Modal, useNow, useToast } from '../components/ui.jsx';
+import { Modal, Stat, Switch, useNow } from '../components/ui.jsx';
 import { ago, clock, fa, faDigits, msText, resultText } from '../app/format.js';
-import { batteryIcon, MobileHeader, MobileNav, SyncPill, syncView } from '../layout/Shell.jsx';
+import { MobileHeader, MobileNav, SyncPill, syncView } from '../layout/Shell.jsx';
 
 // ---------- shared practice logic ----------
 function usePracticeModel() {
@@ -117,45 +117,67 @@ function previewFacelets(m) {
 }
 
 // ---------- pieces ----------
-function ScrambleLine({ m, className }) {
-  if (m.p.mode === 'free') return <p className={className}>تمرین آزاد · بدون اسکرَمبل از پیش تعیین‌شده</p>;
-  if (!m.tokens.length) return <p className={className}>{m.busyScramble ? 'در حال ساخت اسکرَمبل…' : '—'}</p>;
+const PASSED = new Set([PHASES.ready, PHASES.inspecting, PHASES.solving, PHASES.done]);
+
+function timerTone(p) {
+  if (p.phase === PHASES.solving) return 'text-accent';
+  if (p.phase === PHASES.inspecting) return 'text-warn';
+  if (p.phase === PHASES.ready) return 'text-ok';
+  if (p.phase === PHASES.invalid || p.phase === PHASES.noCube) return 'text-ink/25';
+  return 'text-ink';
+}
+
+function statusDot(p) {
+  if (p.phase === PHASES.invalid) return 'bg-bad';
+  if (p.phase === PHASES.noCube) return 'bg-faint';
+  if (p.phase === PHASES.ready || p.phase === PHASES.done) return 'bg-ok';
+  if (p.phase === PHASES.inspecting) return 'bg-warn animate-pulse';
+  if (p.phase === PHASES.solving) return 'bg-accent animate-pulse';
+  return 'bg-accent';
+}
+
+function ScrambleMoves({ m, small = false }) {
+  if (m.p.mode === 'free') return <p className="text-sm text-muted py-2">تمرین آزاد · بدون اسکرَمبل از پیش تعیین‌شده</p>;
+  if (!m.tokens.length) return <p className="text-sm text-muted py-2">{m.busyScramble ? <><i className="fa-solid fa-circle-notch animate-spin ms-1 text-accent"></i> در حال ساخت اسکرَمبل…</> : '—'}</p>;
+  const passed = PASSED.has(m.p.phase);
   return (
-    <p className={className} dir="ltr" aria-label={'اسکرَمبل: ' + m.p.scramble}>
+    <div dir="ltr" className={'flex flex-wrap ' + (small ? 'gap-1 justify-center' : 'gap-1.5')} aria-label={'اسکرَمبل: ' + m.p.scramble}>
       {m.tokens.map((t, i) => {
-        const done = m.cursor != null && i < m.cursor;
         const cur = m.cursor === i;
-        const passed = m.p.phase === PHASES.ready || m.p.phase === PHASES.inspecting || m.p.phase === PHASES.solving || m.p.phase === PHASES.done;
+        const done = passed || (m.cursor != null && i < m.cursor);
         return (
-          <span key={i} className={cur ? 'text-cyan-300 bg-cyan-400/15 rounded px-1' : done || passed ? 'text-slate-500' : ''}>
-            {t}{i < m.tokens.length - 1 ? ' ' : ''}
+          <span key={i} className={'move ' + (small ? 'h-8 min-w-[2.1rem] text-sm px-1.5 ' : '') + (cur ? 'bg-accent text-white' : done ? 'text-faint' : 'bg-raised text-ink')}>
+            {t}
           </span>
         );
       })}
-    </p>
+    </div>
   );
 }
 
 function ScrambleStatus({ m }) {
   const p = m.p;
-  if (p.mode === 'free') return <span className="text-xs text-slate-400"><i className="fa-solid fa-shuffle ml-1"></i>آماده‌سازی آزاد</span>;
+  if (p.mode === 'free') return <span className="text-xs text-muted">آماده‌سازی آزاد</span>;
   if (p.phase === PHASES.ready || p.phase === PHASES.inspecting || p.phase === PHASES.solving)
-    return <span className="text-xs text-emerald-300"><i className="fa-solid fa-check-circle ml-1"></i>وضعیت هدف تأیید شد</span>;
-  if (p.phase === PHASES.scrambling) return <span className="text-xs text-cyan-300">حرکت {fa(Math.max(0, m.tokens.length - p.remaining.length + 1))} از {fa(m.tokens.length)}</span>;
-  if (p.phase === PHASES.planning) return <span className="text-xs text-slate-400"><i className="fa-solid fa-spinner animate-spin ml-1"></i>محاسبهٔ مسیر</span>;
-  if (p.phase === PHASES.noCube) return <span className="text-xs text-slate-400">بررسی هدف پس از اتصال</span>;
-  return <span className="text-xs text-slate-400"></span>;
+    return <span className="text-xs text-ok"><i className="fa-solid fa-circle-check ms-1"></i>وضعیت هدف تأیید شد</span>;
+  if (p.phase === PHASES.scrambling) return <span className="text-xs text-accent">حرکت {fa(Math.max(1, m.tokens.length - p.remaining.length + 1))} از {fa(m.tokens.length)}</span>;
+  if (p.phase === PHASES.planning) return <span className="text-xs text-muted"><i className="fa-solid fa-circle-notch animate-spin ms-1"></i>محاسبهٔ مسیر</span>;
+  if (p.phase === PHASES.noCube) return <span className="text-xs text-faint">بررسی هدف پس از اتصال</span>;
+  return null;
 }
 
 function CorrectionStrip({ m }) {
   if (!m.offPath || !m.p.remaining.length) return null;
   const [cur, ...rest] = m.p.remaining;
   return (
-    <div className={'mt-4 rounded-xl p-3 text-sm ' + (m.p.deviated ? 'bg-red-500/10 text-red-300' : 'bg-cyan-400/5 text-slate-300')} role="status">
-      <span className="text-xs block mb-1">{m.p.deviated ? <><i className="fa-solid fa-circle-exclamation ml-1"></i>انحراف تشخیص داده شد؛ مسیر اصلاح از همین وضعیت:</> : 'مسیر رسیدن به اسکرَمبل از وضعیت فعلی:'}</span>
-      <span dir="ltr" className="move-font block text-center text-base">
-        <span className="text-slate-900 bg-cyan-400 rounded px-1.5 font-bold">{cur}</span> {rest.join(' ')}
-      </span>
+    <div className={'mt-4 rounded-xl border p-3.5 ' + (m.p.deviated ? 'border-bad/30 bg-bad/5' : 'border-accent/25 bg-accent/5')} role="status">
+      <p className={'text-xs mb-2 ' + (m.p.deviated ? 'text-bad' : 'text-muted')}>
+        {m.p.deviated ? <><i className="fa-solid fa-circle-exclamation ms-1"></i>انحراف تشخیص داده شد؛ مسیر اصلاح از همین وضعیت:</> : 'مسیر رسیدن به اسکرَمبل از وضعیت فعلی:'}
+      </p>
+      <div dir="ltr" className="flex flex-wrap gap-1.5">
+        <span className="move bg-accent text-white">{cur}</span>
+        {rest.map((t, i) => <span key={i} className="move bg-raised text-ink">{t}</span>)}
+      </div>
     </div>
   );
 }
@@ -166,50 +188,50 @@ function ResultActions({ m, compact = false }) {
   const [note, setNote] = useState('');
   if (m.p.phase !== PHASES.done || !s) return null;
   const setPenalty = (penalty) => m.actions.updateSolve(s.id, { penalty: s.penalty === penalty ? null : penalty });
-  const btn = compact ? 'flex-1 py-2 bg-white/5 rounded-lg text-xs hover:bg-white/10 transition-colors' : 'px-4 py-2 rounded-xl border border-white/10 bg-white/5 text-sm hover:bg-white/10 transition-all';
+  const sec = 'btn-secondary btn-sm';
   return (
-    <div className={compact ? 'flex gap-2 mt-3 flex-wrap' : 'flex gap-3 justify-center flex-wrap mt-6'}>
-      <button className={btn + (s.penalty === '+2' ? ' text-amber-300 border-amber-400/40' : '')} aria-pressed={s.penalty === '+2'} onClick={() => setPenalty('+2')}>+2</button>
-      <button className={btn + ' text-red-400' + (s.penalty === 'DNF' ? ' border-red-400/40' : '')} aria-pressed={s.penalty === 'DNF'} onClick={() => setPenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'ثبت DNF'}</button>
-      <button className={btn} onClick={() => { setNote(s.note || ''); setNoteOpen(true); }}><i className="fa-regular fa-note-sticky ml-1"></i>یادداشت</button>
-      <a className={btn + ' text-center'} href={'#/solve/' + s.id}><i className="fa-solid fa-circle-info ml-1"></i>جزئیات</a>
-      <button className={btn + ' text-cyan-300'} onClick={m.primary}>حل بعدی</button>
+    <div className={'flex flex-wrap gap-2 ' + (compact ? 'mt-4' : 'justify-center mt-6')}>
+      <button className={sec + (s.penalty === '+2' ? ' !border-warn/50 !text-warn' : '')} aria-pressed={s.penalty === '+2'} onClick={() => setPenalty('+2')}><span className="num">+2</span></button>
+      <button className={sec + (s.penalty === 'DNF' ? ' !border-bad/50 !text-bad' : '')} aria-pressed={s.penalty === 'DNF'} onClick={() => setPenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'DNF'}</button>
+      <button className={sec} onClick={() => { setNote(s.note || ''); setNoteOpen(true); }}><i className="fa-regular fa-note-sticky"></i>یادداشت</button>
+      <a className={sec} href={'#/solve/' + s.id}><i className="fa-solid fa-circle-info"></i>جزئیات</a>
+      <button className="btn-primary btn-sm" onClick={m.primary}>حل بعدی{!compact && <kbd className="!bg-white/15 !border-white/20 !text-white !h-5">Space</kbd>}</button>
       <Modal open={noteOpen} onClose={() => setNoteOpen(false)} title="یادداشت این حل">
-        <textarea className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm min-h-[120px]" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} aria-label="یادداشت" />
-        <button className="mt-4 w-full bg-cyan-400 text-slate-900 font-bold py-3 rounded-xl" onClick={async () => { await m.actions.updateSolve(s.id, { note }); setNoteOpen(false); }}>ذخیره</button>
+        <textarea className="field min-h-[120px]" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} aria-label="یادداشت" />
+        <button className="btn-primary w-full mt-4" onClick={async () => { await m.actions.updateSolve(s.id, { note }); setNoteOpen(false); }}>ذخیره</button>
       </Modal>
     </div>
   );
 }
 
 // Optional user goal; nothing is shown until one is set in settings.
-function GoalLine({ m, className = 'text-xs mt-3' }) {
+function GoalLine({ m, className = 'text-sm mt-3' }) {
   const goal = m.settings.goalMs;
   if (!goal || m.p.phase !== PHASES.done || !m.last || m.last.penalty === 'DNF') return null;
   const t = m.last.rawMs + (m.last.penalty === '+2' ? 2000 : 0);
-  return <p className={className + (t <= goal ? ' text-green-300' : ' text-slate-400')}>هدف {msText(goal, { persian: true })} ثانیه: {t <= goal ? 'رسیدی' : faDigits(((t - goal) / 1000).toFixed(2)) + ' ثانیه بیشتر'}</p>;
+  return <p className={className + (t <= goal ? ' text-ok' : ' text-muted')}>هدف {msText(goal, { persian: true })} ثانیه: {t <= goal ? 'رسیدی' : faDigits(((t - goal) / 1000).toFixed(2)) + ' ثانیه بیشتر'}</p>;
 }
 
 function SaveError({ m }) {
   if (!m.app.saveError || m.p.phase !== PHASES.done) return null;
-  return <p className="text-xs text-red-300 mt-3" role="alert"><i className="fa-solid fa-triangle-exclamation ml-1"></i>{m.app.saveError}</p>;
+  return <p className="text-sm text-bad mt-3" role="alert"><i className="fa-solid fa-triangle-exclamation ms-1"></i>{m.app.saveError}</p>;
 }
 
 function InvalidBox({ m, compact }) {
   if (m.p.phase !== PHASES.invalid) return null;
   const needsLink = m.device.status !== 'ready';
   return (
-    <div className={'cyber-panel p-4 rounded-xl border-red-500/50 bg-red-500/5 text-right ' + (compact ? '' : 'max-w-md mx-auto mt-6')} role="alert">
-      <div className="flex items-center gap-3">
-        <i className="fa-solid fa-triangle-exclamation text-red-400"></i>
+    <div className={'rounded-xl border border-bad/30 bg-bad/5 p-4 text-right ' + (compact ? '' : 'max-w-md mx-auto mt-6')} role="alert">
+      <div className="flex items-start gap-3">
+        <i className="fa-solid fa-triangle-exclamation text-bad mt-1"></i>
         <div>
-          <div className="text-xs font-bold text-red-400">نتیجه نامعتبر{m.p.invalidReason !== 'cancel' ? ' / قطع یا ازدست‌رفتن حرکت' : ''}</div>
-          <div className="text-[10px] text-secondary">{m.p.invalidReason === 'cancel' ? 'تلاش لغو شد و چیزی ذخیره نشد.' : 'این زمان در رکوردهای معتبر نمی‌آید. اتصال مجدد نتیجهٔ ناقص را معتبر نمی‌کند.'}</div>
+          <div className="text-sm font-semibold text-bad">نتیجه نامعتبر{m.p.invalidReason !== 'cancel' ? ' · قطع یا ازدست‌رفتن حرکت' : ''}</div>
+          <div className="text-xs text-muted mt-1 leading-6">{m.p.invalidReason === 'cancel' ? 'تلاش لغو شد و چیزی ذخیره نشد.' : 'این زمان در رکوردهای معتبر نمی‌آید. اتصال مجدد نتیجهٔ ناقص را معتبر نمی‌کند.'}</div>
         </div>
       </div>
       {needsLink
-        ? <button className="w-full mt-3 py-2 border border-red-500/30 rounded-lg text-xs text-red-400" onClick={() => (m.device.status === 'idle' || m.device.status === 'error') && m.link.connect()}>تلاش مجدد اتصال</button>
-        : <button className="w-full mt-3 py-2 border border-red-500/30 rounded-lg text-xs text-red-300" onClick={m.primary}>شروع آماده‌سازی جدید</button>}
+        ? <button className="btn-danger btn-sm w-full mt-4" onClick={() => (m.device.status === 'idle' || m.device.status === 'error') && m.link.connect()}>تلاش مجدد اتصال</button>
+        : <button className="btn-secondary btn-sm w-full mt-4" onClick={m.primary}>شروع آماده‌سازی جدید</button>}
     </div>
   );
 }
@@ -217,40 +239,105 @@ function InvalidBox({ m, compact }) {
 function ConnectCta({ m, className = '' }) {
   if (m.p.phase !== PHASES.noCube) return null;
   const busy = m.device.status === 'selecting' || m.device.status === 'connecting';
-  if (m.device.status === 'recovering') return <p className={'text-xs text-amber-300 ' + className}><i className="fa-solid fa-spinner animate-spin ml-1"></i>بازیابی خودکار اتصال…</p>;
-  if (!m.app.support.ok) return <a href="#/connection" className={'text-xs text-amber-300 underline ' + className}>{m.app.support.text}</a>;
+  if (m.device.status === 'recovering') return <p className={'text-sm text-warn ' + className}><i className="fa-solid fa-circle-notch animate-spin ms-1"></i>بازیابی خودکار اتصال…</p>;
+  if (!m.app.support.ok) return <a href="#/connection" className={'text-sm text-warn underline underline-offset-4 ' + className}>{m.app.support.text}</a>;
   return busy
-    ? <button className={'px-6 py-3 rounded-xl border border-white/15 bg-white/5 text-sm ' + className} onClick={() => m.link.cancel()}>لغو تلاش اتصال</button>
-    : <button className={'px-6 py-3 rounded-xl bg-cyan-400 text-slate-900 font-bold text-sm ' + className} onClick={() => m.link.connect()}><i className="fa-brands fa-bluetooth-b ml-2"></i>اتصال به روبیک</button>;
+    ? <button className={'btn-secondary btn-lg ' + className} onClick={() => m.link.cancel()}><i className="fa-solid fa-circle-notch animate-spin"></i>لغو تلاش اتصال</button>
+    : <button className={'btn-primary btn-lg ' + className} onClick={() => m.link.connect()}><i className="fa-brands fa-bluetooth-b"></i>اتصال به روبیک</button>;
+}
+
+function ModeSwitch({ m, className = '' }) {
+  const free = m.p.mode === 'free';
+  const off = m.p.phase === PHASES.solving;
+  return (
+    <div className={'seg ' + className} role="group" aria-label="نوع آماده‌سازی">
+      <button aria-pressed={!free} disabled={off} onClick={() => free && m.newScramble()}>اسکرَمبل هدایت‌شده</button>
+      <button aria-pressed={free} disabled={off} onClick={() => !free && m.practiceApi.startFree()}>تمرین آزاد</button>
+    </div>
+  );
+}
+
+function InspectionSwitch({ m, short = false }) {
+  return (
+    <label className="flex items-center gap-2.5 text-sm text-muted cursor-pointer">
+      <Switch on={m.settings.inspectionEnabled} label="بازرسی پیش از حل" disabled={m.p.phase === PHASES.solving || m.p.phase === PHASES.inspecting}
+        onChange={(v) => m.actions.saveSettings({ inspectionEnabled: v })} />
+      <span>بازرسی <span className="text-faint">{fa(m.settings.inspectionSeconds)}{short ? 'ث' : ' ثانیه'}</span></span>
+    </label>
+  );
 }
 
 function SessionPicker({ m, open, onClose }) {
   const [name, setName] = useState('');
   return (
     <Modal open={open} onClose={onClose} title="جلسهٔ تمرین">
-      <div className="space-y-2 max-h-72 overflow-y-auto mb-4">
-        {m.data.sessions.length === 0 && <p className="text-sm text-slate-400">هنوز جلسه‌ای ساخته نشده؛ با اولین حل، جلسهٔ تازه خودکار ساخته می‌شود.</p>}
+      <div className="space-y-1.5 max-h-72 overflow-y-auto mb-5">
+        {m.data.sessions.length === 0 && <p className="text-sm text-muted">هنوز جلسه‌ای ساخته نشده؛ با اولین حل، جلسهٔ تازه خودکار ساخته می‌شود.</p>}
         {[...m.data.sessions].reverse().map((s) => (
           <button key={s.id} onClick={() => { m.actions.selectSession(s.id); onClose(); }}
-            className={'w-full text-right p-3 rounded-xl border ' + (s.id === m.session?.id ? 'border-cyan-400/50 bg-cyan-400/5' : 'border-white/10 bg-white/5')}>
-            <span className="font-bold text-sm">{s.name}</span>
-            <span className="text-xs text-slate-400 mr-2">{new Date(s.createdAt).toLocaleDateString('fa-IR')}</span>
+            className={'w-full flex items-center justify-between text-right px-3.5 py-3 rounded-lg border transition-colors ' + (s.id === m.session?.id ? 'border-accent/50 bg-accent/10' : 'border-line hover:border-strong')}>
+            <span className="font-medium text-sm">{s.name}</span>
+            <span className="text-xs text-faint">{new Date(s.createdAt).toLocaleDateString('fa-IR')}</span>
           </button>
         ))}
       </div>
-      <label className="text-xs text-slate-400 block mb-1" htmlFor="new-session">جلسهٔ تازه</label>
+      <label className="text-xs text-muted block mb-1.5" htmlFor="new-session">جلسهٔ تازه</label>
       <div className="flex gap-2">
-        <input id="new-session" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً تمرین عصر" className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 text-sm min-h-[44px]" />
-        <button className="px-4 rounded-xl bg-cyan-400 text-slate-900 font-bold text-sm min-h-[44px]" onClick={async () => { await m.actions.newSession(name.trim() || undefined); setName(''); onClose(); }}>ساخت</button>
+        <input id="new-session" value={name} onChange={(e) => setName(e.target.value)} placeholder="مثلاً تمرین عصر" className="field flex-1" />
+        <button className="btn-primary" onClick={async () => { await m.actions.newSession(name.trim() || undefined); setName(''); onClose(); }}>ساخت</button>
       </div>
       {m.session && (
-        <button className="mt-3 text-xs text-slate-400 underline" onClick={async () => { const n = prompt('نام تازهٔ جلسه', m.session.name); if (n?.trim()) await m.actions.renameSession(m.session.id, n.trim()); }}>تغییر نام جلسهٔ فعلی</button>
+        <button className="btn-ghost btn-sm mt-3 -ms-3" onClick={async () => { const n = prompt('نام تازهٔ جلسه', m.session.name); if (n?.trim()) await m.actions.renameSession(m.session.id, n.trim()); }}>
+          <i className="fa-solid fa-pen text-[10px]"></i>تغییر نام جلسهٔ فعلی
+        </button>
       )}
     </Modal>
   );
 }
 
-// ---------- desktop (design 01) ----------
+function CubePanel({ m, cube, height, className = '' }) {
+  const live = !!m.live.facelets;
+  return (
+    <div className={'relative ' + className}>
+      <div className="absolute top-3 inset-x-3 flex items-center justify-between z-10 pointer-events-none">
+        <span className={'badge pointer-events-auto ' + (live ? 'border-ok/30 bg-ok/10 text-ok' : 'border-line bg-surface text-muted')}>
+          <span className={'dot w-1.5 h-1.5 ' + (live ? 'bg-ok' : 'bg-faint')}></span>{live ? 'وضعیت زنده' : m.p.scramble ? 'پیش‌نمایش اسکرَمبل' : 'مکعب'}
+        </span>
+        <button className="icon-btn pointer-events-auto bg-surface/80 border border-line" title="بازنشانی نمای دوربین" aria-label="بازنشانی نمای دوربین؛ بدون تغییر روبیک" onClick={() => cube.current?.resetCamera()}>
+          <i className="fa-solid fa-rotate-left text-sm"></i>
+        </button>
+      </div>
+      <CubeView ref={cube} facelets={previewFacelets(m)} lastMove={m.live.lastMove} moveKey={m.live.moveKey} dim={!live} height={height}
+        label="نمای سه‌بعدی روبیک؛ چرخش نما فقط دوربین را تغییر می‌دهد" />
+    </div>
+  );
+}
+
+function CurrentMove({ m, className = '' }) {
+  if (m.p.phase !== PHASES.scrambling || m.offPath || !m.p.remaining[0]) return null;
+  return (
+    <div className={'flex items-center justify-center gap-3 text-sm text-muted ' + className}>
+      <span>حرکت جاری</span>
+      <span className="move bg-accent text-white h-9">{m.p.remaining[0]}</span>
+      {m.p.remaining[1] && <><span className="text-faint">بعدی</span><span className="move bg-raised text-ink h-9">{m.p.remaining[1]}</span></>}
+    </div>
+  );
+}
+
+function SolveRow({ s, n, best }) {
+  return (
+    <a href={'#/solve/' + s.id} className="flex items-center justify-between px-2.5 py-2 -mx-2.5 rounded-lg hover:bg-raised transition-colors group">
+      <span className="flex items-center gap-3">
+        <span className="num text-xs text-faint w-6">{n}</span>
+        <span className={'num text-sm font-medium ' + (s.penalty === 'DNF' ? 'text-bad' : best ? 'text-ok' : 'text-ink')}>{resultText(s)}</span>
+        {best && <span className="text-[10px] text-ok">بهترین</span>}
+      </span>
+      <span className="text-xs text-faint group-hover:text-muted">{ago(s.createdAt)}</span>
+    </a>
+  );
+}
+
+// ---------- desktop ----------
 export function PracticeDesktop() {
   const m = usePracticeModel();
   useShortcuts(m);
@@ -258,159 +345,118 @@ export function PracticeDesktop() {
   const [pick, setPick] = useState(false);
   const best = bestSolve(m.counted);
   const ao5 = aoN(m.counted, 5), ao12 = aoN(m.counted, 12);
-  const recent = [...m.sessionSolves].filter((s) => s.valid).slice(-3).reverse();
+  const valid = m.sessionSolves.filter((s) => s.valid);
+  const recent = [...valid].slice(-8).reverse();
   const copy = () => m.p.scramble && navigator.clipboard?.writeText(m.p.scramble);
   const timerClick = () => (m.p.phase === PHASES.ready || m.p.phase === PHASES.freePrep) && m.primary();
 
   return (
-    <main className="flex-grow flex flex-col lg:flex-row p-6 gap-6 max-w-[1600px] mx-auto w-full">
-      <aside id="session-sidebar" className="w-full lg:w-80 flex flex-col gap-6 order-2 lg:order-1">
-        <div className="glass-panel rounded-2xl p-6 flex flex-col gap-6">
-          <div>
-            <h2 className="text-slate-400 text-sm mb-1">جلسه فعلی</h2>
-            <div className="flex justify-between items-center">
-              <span className="text-xl font-bold">{m.session?.name || 'جلسهٔ تازه'}</span>
-              {<button className="text-cyan-400 text-sm hover:underline" onClick={() => setPick(true)}>تغییر</button>}
+    <main className="flex-grow w-full max-w-[1400px] mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
+      <div className="flex flex-col gap-6 min-w-0">
+        <section id="scramble" className="card p-5">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <h2 className="section-title">{m.p.mode === 'free' ? 'تمرین آزاد' : 'اسکرَمبل'}</h2>
+              <ScrambleStatus m={m} />
+            </div>
+            <div className="flex items-center gap-1">
+              <button className="icon-btn" title="کپی" aria-label="کپی اسکرَمبل" onClick={copy} disabled={!m.p.scramble}><i className="fa-regular fa-copy"></i></button>
+              <button className="btn-ghost btn-sm" title="اسکرَمبل جدید (N)" onClick={m.newScramble} disabled={m.busyScramble || m.p.phase === PHASES.solving}>
+                <i className={'fa-solid fa-rotate-right' + (m.busyScramble ? ' animate-spin' : '')}></i>اسکرَمبل جدید
+              </button>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-              <span className="text-xs text-slate-500 block mb-1">تعداد حل</span>
-              <span className="text-2xl font-bold timer-font">{fa(m.sessionSolves.filter((s) => s.valid).length)}</span>
-            </div>
-            <div className="p-3 rounded-xl bg-white/5 border border-white/5">
-              <span className="text-xs text-slate-500 block mb-1">بهترین</span>
-              <span className="text-2xl font-bold timer-font">{best ? resultText(best, { persian: true }) : '—'}</span>
-            </div>
-          </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center py-2 border-b border-white/5">
-              <span className="text-slate-400 text-sm">میانگین ۵ (ao5)</span>
-              {ao5 == null ? <span className="text-xs text-slate-500 italic">داده کافی نیست</span> : <span className="font-bold timer-font text-purple-400">{msText(ao5, { persian: true })}</span>}
-            </div>
-            <div className="flex justify-between items-center py-2 border-b border-white/5">
-              <span className="text-slate-400 text-sm">میانگین ۱۲ (ao12)</span>
-              {ao12 == null ? <span className="text-xs text-slate-500 italic">داده کافی نیست</span> : <span className="font-bold timer-font text-purple-400">{msText(ao12, { persian: true })}</span>}
-            </div>
-          </div>
-          <div>
-            <h3 className="text-slate-400 text-xs uppercase tracking-wider mb-4">تاریخچه اخیر</h3>
-            <div className="space-y-3">
-              {recent.length === 0 && <p className="text-xs text-slate-500">هنوز حلی در این جلسه ثبت نشده است.</p>}
-              {recent.map((s) => {
-                const n = m.sessionSolves.filter((x) => x.valid).indexOf(s) + 1;
-                const isBest = best && s.id === best.id;
-                return (
-                  <a key={s.id} href={'#/solve/' + s.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 transition-all group">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-600">#{fa(n)}</span>
-                      <span className={'font-medium timer-font text-sm' + (isBest ? ' text-green-400' : '')}>{resultText(s, { persian: true })}</span>
-                    </div>
-                    <span className="text-[10px] text-slate-600 group-hover:text-slate-400">{ago(s.createdAt)}</span>
-                  </a>
-                );
-              })}
-            </div>
-            <a href="#/stats" className="block text-center w-full mt-4 py-2 text-sm text-slate-500 hover:text-white transition-all border border-dashed border-white/10 rounded-lg">مشاهده همه آمار</a>
-          </div>
-        </div>
-        <div className="glass-panel rounded-2xl p-5 border-l-2 border-l-cyan-500">
-          <p className="text-xs text-slate-400 leading-relaxed italic">
-            <i className="fa-solid fa-info-circle ml-1 text-cyan-500"></i>
-            زمان بر پایه دریافت حرکت در مرورگر است؛ این یک تایمر مسابقه‌ای رسمی نیست.
-          </p>
-        </div>
-      </aside>
-
-      <div id="timer-container" className="flex-grow flex flex-col gap-6 order-1 lg:order-2">
-        <div className="glass-panel rounded-2xl p-6 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/5 blur-3xl rounded-full"></div>
-          <div className="flex justify-between items-center mb-4">
-            <span className="text-xs font-bold text-cyan-400 bg-cyan-400/10 px-2 py-1 rounded">{m.p.mode === 'free' ? 'تمرین آزاد' : 'اسکرمبل فعلی'}</span>
-            <ScrambleStatus m={m} />
-            <div className="flex gap-2">
-              <button className="p-2 hover:bg-white/10 rounded-lg transition-all text-slate-400" title="کپی" aria-label="کپی اسکرمبل" onClick={copy} disabled={!m.p.scramble}><i className="fa-solid fa-copy"></i></button>
-              <button className="p-2 hover:bg-white/10 rounded-lg transition-all text-slate-400" title="اسکرمبل جدید (N)" aria-label="اسکرمبل جدید" onClick={m.newScramble} disabled={m.busyScramble || m.p.phase === PHASES.solving}><i className={'fa-solid fa-rotate-right' + (m.busyScramble ? ' animate-spin' : '')}></i></button>
-            </div>
-          </div>
-          <div className="ltr-dir w-full text-center py-2">
-            <ScrambleLine m={m} className="text-xl md:text-2xl font-mono tracking-widest text-slate-200" />
-          </div>
+          <ScrambleMoves m={m} />
           <CorrectionStrip m={m} />
-        </div>
+        </section>
 
-        <div className={'glass-panel rounded-2xl flex-grow flex flex-col items-center justify-start relative min-h-[600px] pt-16 pb-8 ' + (m.p.phase === PHASES.invalid ? 'border border-red-500/30' : 'cyber-glow')}>
-          <div className="absolute top-6 left-6"><SyncPill /></div>
-          <label className="absolute top-6 right-6 flex items-center gap-2 text-xs text-slate-300">
-            <input type="checkbox" className="accent-cyan-400 w-4 h-4" checked={m.settings.inspectionEnabled} disabled={m.p.phase === PHASES.solving || m.p.phase === PHASES.inspecting}
-              onChange={(e) => m.actions.saveSettings({ inspectionEnabled: e.target.checked })} />
-            بازرسی پیش از حل<span className="text-slate-400">{fa(m.settings.inspectionSeconds)} ثانیه</span>
-          </label>
-          <div className="text-center z-10 mb-8">
-            <button type="button" onClick={timerClick} className="block mx-auto cursor-default" aria-live="off" aria-label={'تایمر ' + m.display}>
-              <div dir="ltr" style={{ fontSize: 'clamp(4.5rem, 10vw, 10rem)', lineHeight: 1.05, textShadow: '0 0 30px rgba(255,255,255,0.2)' }} className={'timer-font font-black ' + (m.p.phase === PHASES.solving ? 'text-cyan-300' : m.p.phase === PHASES.inspecting ? 'text-yellow-300' : m.p.phase === PHASES.invalid ? 'text-slate-600' : 'text-white')}>{m.display}</div>
-            </button>
-            {m.p.phase === PHASES.inspecting && <span className="inline-block bg-yellow-500 text-slate-900 text-[10px] font-bold px-2 py-0.5 rounded">بازرسی فعال</span>}
-            <p className={'font-medium tracking-widest mt-4 flex items-center justify-center gap-3 ' + (m.p.phase === PHASES.invalid ? 'text-red-400' : 'text-cyan-400')} role="status">
-              <span className="w-12 h-[1px] bg-cyan-400/30"></span>
-              {m.status}
-              <span className="w-12 h-[1px] bg-cyan-400/30"></span>
-            </p>
-            {m.p.phase !== PHASES.invalid && m.sub && <p className="text-slate-500 text-sm mt-2 max-w-xl mx-auto">{m.sub}</p>}
-            {m.p.phase === PHASES.scrambling && !m.offPath && m.p.remaining[0] && (
-              <p className="text-slate-300 text-sm mt-3">حرکت جاری <Alg moves={m.p.remaining[0]} className="text-cyan-300 font-bold text-lg mx-1" />{m.p.remaining[1] && <> · بعدی <Alg moves={m.p.remaining[1]} /></>}</p>
-            )}
-            {m.p.phase === PHASES.freePrep && <button className="mt-4 px-6 py-2 rounded-xl bg-cyan-400 text-slate-900 font-bold" onClick={() => m.practiceApi.armFree()}>آماده‌ام <kbd className="text-[10px] opacity-70 mr-1">Space</kbd></button>}
-            {m.p.phase === PHASES.solving && <p className="text-xs text-slate-400 mt-2">{fa(m.p.moves.length)} حرکت دریافت‌شده</p>}
-            <GoalLine m={m} />
-            <SaveError m={m} />
-            <ResultActions m={m} />
-            <InvalidBox m={m} />
-            <ConnectCta m={m} className="mt-6" />
-          </div>
-
-          <div id="cube-wrapper" className="relative w-full max-w-lg">
-            <CubeView ref={cube} facelets={previewFacelets(m)} lastMove={m.live.lastMove} moveKey={m.live.moveKey} dim={!m.live.facelets} height={400}
-              label="نمای سه‌بعدی روبیک؛ چرخش نما فقط دوربین را تغییر می‌دهد" />
-            {!m.live.facelets && m.p.scramble && <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[10px] text-slate-400 bg-black/40 px-2 py-0.5 rounded">پیش‌نمایش اسکرمبل</span>}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-4 p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl">
-              <button className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 transition-all text-slate-300" title="بازنشانی دوربین" aria-label="بازنشانی نمای دوربین؛ بدون تغییر روبیک" onClick={() => cube.current?.resetCamera()}>
-                <i className="fa-solid fa-video"></i>
-              </button>
-              <div className="w-[1px] h-6 bg-white/10"></div>
-              <button className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-all" title="کلید F"
-                disabled={m.p.phase === PHASES.solving} onClick={() => (m.p.mode === 'free' ? m.newScramble() : m.practiceApi.startFree())}>
-                {m.p.mode === 'free' ? 'اسکرمبل هدایت‌شده' : 'تمرین آزاد'}
-              </button>
+        <section id="stage" className={'card flex-grow flex flex-col overflow-hidden ' + (m.p.phase === PHASES.invalid ? 'border-bad/30' : '')}>
+          <div className="flex items-center justify-between gap-4 px-5 h-14 border-b border-line">
+            <ModeSwitch m={m} />
+            <div className="flex items-center gap-4">
+              <InspectionSwitch m={m} />
+              <SyncPill />
             </div>
           </div>
-        </div>
+          <div className="flex-grow grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="flex flex-col items-center justify-center text-center px-6 py-12 min-h-[440px]">
+              <span className="badge border-line bg-bg text-muted mb-6" role="status">
+                <span className={'dot w-1.5 h-1.5 ' + statusDot(m.p)}></span>
+                <span className={m.p.phase === PHASES.invalid ? 'text-bad' : 'text-ink'}>{m.status}</span>
+              </span>
+              <button type="button" onClick={timerClick} className="block cursor-default rounded-2xl" aria-live="off" aria-label={'تایمر ' + m.display}>
+                <div dir="ltr" style={{ fontSize: 'clamp(5rem, 9vw, 9.5rem)', lineHeight: 1 }}
+                  className={'num font-semibold tracking-[-0.04em] transition-colors ' + timerTone(m.p)}>{m.display}</div>
+              </button>
+              {m.p.phase !== PHASES.invalid && m.sub && <p className="text-sm text-muted mt-6 max-w-md leading-7">{m.sub}</p>}
+              <CurrentMove m={m} className="mt-5" />
+              {m.p.phase === PHASES.freePrep && <button className="btn-primary btn-lg mt-6" onClick={() => m.practiceApi.armFree()}>آماده‌ام<kbd className="!bg-white/15 !border-white/20 !text-white">Space</kbd></button>}
+              {m.p.phase === PHASES.solving && <p className="text-sm text-muted mt-5"><span className="num text-ink">{m.p.moves.length}</span> حرکت دریافت‌شده</p>}
+              <GoalLine m={m} />
+              <SaveError m={m} />
+              <ResultActions m={m} />
+              <InvalidBox m={m} />
+              <ConnectCta m={m} className="mt-8" />
+            </div>
+            <div id="cube-wrapper" className="border-t xl:border-t-0 xl:border-s border-line bg-bg/40 flex flex-col justify-center">
+              <CubePanel m={m} cube={cube} height={420} />
+            </div>
+          </div>
+        </section>
       </div>
+
+      <aside id="session-sidebar" className="flex flex-col gap-6">
+        <section className="card p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="min-w-0">
+              <div className="eyebrow mb-0.5">جلسهٔ فعلی</div>
+              <div className="text-base font-semibold truncate">{m.session?.name || 'جلسهٔ تازه'}</div>
+            </div>
+            <button className="btn-ghost btn-sm -me-2" onClick={() => setPick(true)}>تغییر</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Stat label="تعداد حل" value={String(valid.length)} />
+            <Stat label="بهترین" value={best ? resultText(best) : '—'} tone={best ? 'text-ok' : ''} />
+            <Stat label="ao5" value={ao5 == null ? null : msText(ao5)} />
+            <Stat label="ao12" value={ao12 == null ? null : msText(ao12)} />
+          </div>
+        </section>
+
+        <section className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="section-title">حل‌های اخیر</h3>
+            <a href="#/stats" className="text-xs link">همهٔ آمار</a>
+          </div>
+          {recent.length === 0
+            ? <p className="text-sm text-faint py-6 text-center">هنوز حلی در این جلسه ثبت نشده است.</p>
+            : <div className="flex flex-col">{recent.map((s) => <SolveRow key={s.id} s={s} n={valid.indexOf(s) + 1} best={best && s.id === best.id} />)}</div>}
+        </section>
+
+        <p className="text-xs text-faint leading-6 px-1">
+          <i className="fa-solid fa-circle-info ms-1"></i>
+          زمان بر پایهٔ دریافت حرکت در مرورگر است؛ این یک تایمر مسابقه‌ای رسمی نیست.
+        </p>
+      </aside>
       <SessionPicker m={m} open={pick} onClose={() => setPick(false)} />
     </main>
   );
 }
 
 export function DesktopFooter() {
-  const { device } = useApp();
-  const ok = device.status === 'ready';
   return (
-    <footer id="footer" className="p-6 flex justify-between items-center text-slate-500 text-xs">
-      <div className="flex items-center gap-4">
-        <span className="px-2 py-1 bg-white/5 rounded border border-white/10" title="میان‌برها">Space: بازرسی/آماده · N: اسکرمبل · F: آزاد · Esc: لغو</span>
+    <footer id="footer" className="w-full max-w-[1400px] mx-auto px-6 pb-6 flex flex-wrap justify-between items-center gap-4 text-xs text-faint">
+      <div className="flex flex-wrap items-center gap-4" title="میان‌برها">
+        <span className="flex items-center gap-1.5"><kbd>Space</kbd>بازرسی / آماده</span>
+        <span className="flex items-center gap-1.5"><kbd>N</kbd>اسکرَمبل جدید</span>
+        <span className="flex items-center gap-1.5"><kbd>F</kbd>تمرین آزاد</span>
+        <span className="flex items-center gap-1.5"><kbd>Esc</kbd>لغو</span>
       </div>
-      <div className="flex items-center gap-6">
-        <a href="#/settings/privacy" className="hover:text-white transition-all">حریم خصوصی</a>
-        <a href="#/connection" className={'flex items-center gap-2 ' + (ok ? 'text-cyan-500/70' : 'text-slate-500')}>
-          <i className="fa-solid fa-bolt-lightning"></i>
-          <span>{ok ? 'متصل · وضعیت معتبر' : 'روبیک متصل نیست'}</span>
-        </a>
-      </div>
+      <a href="#/settings/privacy" className="hover:text-ink">حریم خصوصی</a>
     </footer>
   );
 }
 
-// ---------- mobile (design mobile 01) ----------
+// ---------- mobile ----------
 export function PracticeMobile({ route }) {
   const m = usePracticeModel();
   const cube = useRef(null);
@@ -422,134 +468,94 @@ export function PracticeMobile({ route }) {
   const tap = () => (m.p.phase === PHASES.ready || m.p.phase === PHASES.freePrep) && m.primary();
 
   return (
-    <div className="mob">
-      <MobileHeader title="تمرین"
-        start={<>
-          <a href="#/settings" aria-label="تنظیمات" className="inline-flex items-center justify-center w-11 h-11"><i className="fa-solid fa-gear"></i></a>
-          {m.device.status === 'ready' && m.device.battery != null && (
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-secondary">{fa(m.device.battery)}٪</span>
-              <i className={'fa-solid ' + batteryIcon(m.device.battery) + ' text-cyan text-xs'}></i>
-            </div>
-          )}
-        </>}
-        end={<>
-          <a href="#/settings/data" aria-label={'ذخیره: ' + sv.text} title={sv.text}><i className={'fa-solid ' + sv.icon + ' text-xs ' + (m.app.syncStatus.state === 'synced' ? 'text-cyan' : m.app.syncStatus.state === 'attention' ? 'text-red-400' : 'text-secondary')}></i></a>
-          <a href="#/connection" aria-label="مدیریت اتصال" className={'inline-flex items-center justify-center w-11 h-11 ' + (m.device.status === 'ready' ? 'text-cyan' : 'text-secondary')}>
-            <i className="fa-brands fa-bluetooth-b"></i>
-          </a>
-        </>} />
-      <main className="mt-16 px-4 space-y-4">
-        <div id="scramble-section" className="text-center space-y-2">
-          <div className="text-[10px] text-secondary tracking-widest uppercase">
-            {m.p.mode === 'free' ? 'تمرین آزاد' : m.p.phase === PHASES.ready || m.p.phase === PHASES.solving || m.p.phase === PHASES.inspecting ? 'اسکرَمبل تایید شده' : m.p.phase === PHASES.scrambling ? 'اسکرَمبل هدایت‌شده · حرکت ' + fa(Math.max(1, m.tokens.length - m.p.remaining.length + 1)) + ' از ' + fa(m.tokens.length) : 'اسکرَمبل'}
+    <div className="mob-page">
+      <MobileHeader title="تمرین" />
+      <main className="px-4 pt-4 space-y-4">
+        <section id="scramble-section" className="card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <ScrambleStatus m={m} />
+            <span className="eyebrow">{m.p.mode === 'free' ? 'تمرین آزاد' : 'اسکرَمبل'}</span>
           </div>
-          <div className="scramble-box text-sm text-cyan leading-relaxed px-4 py-2 bg-white/5 rounded-lg border border-white/10">
-            <ScrambleLine m={m} className="" />
-          </div>
+          <ScrambleMoves m={m} small />
           <CorrectionStrip m={m} />
-          <div className="flex justify-center gap-4 pt-1">
-            <button className="text-xs text-secondary hover:text-white transition-colors" onClick={m.newScramble} disabled={m.busyScramble || m.p.phase === PHASES.solving}>
-              <i className={'fa-solid fa-rotate-right ml-1' + (m.busyScramble ? ' animate-spin' : '')}></i> اسکرَمبل جدید
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-line">
+            <button className="btn-ghost btn-sm -ms-2" onClick={m.newScramble} disabled={m.busyScramble || m.p.phase === PHASES.solving}>
+              <i className={'fa-solid fa-rotate-right' + (m.busyScramble ? ' animate-spin' : '')}></i>اسکرَمبل جدید
             </button>
-            <label className="flex items-center gap-2 min-h-[44px] text-xs text-secondary">
-              <input type="checkbox" aria-label="بازرسی پیش از حل" checked={m.settings.inspectionEnabled} onChange={(e) => m.actions.saveSettings({ inspectionEnabled: e.target.checked })} /> بازرسی {fa(m.settings.inspectionSeconds)}ث
-            </label>
+            <InspectionSwitch m={m} short />
           </div>
-        </div>
+        </section>
 
-        <div id="timer-section" className="text-center py-2">
-          <button type="button" className="w-full" onClick={tap} aria-label={'تایمر ' + m.display}>
-            <div className={'font-tabular text-6xl font-black tracking-tighter ' + (m.p.phase === PHASES.solving ? 'text-cyan-300' : m.p.phase === PHASES.inspecting ? 'text-yellow-300' : m.p.phase === PHASES.invalid ? 'text-slate-500' : 'text-white')}>{m.display}</div>
+        <section id="timer-section" className="text-center py-4">
+          <span className="badge border-line bg-surface text-muted mb-4" role="status">
+            <span className={'dot w-1.5 h-1.5 ' + statusDot(m.p)}></span>
+            <span className={m.p.phase === PHASES.invalid ? 'text-bad' : 'text-ink'}>{m.status}</span>
+          </span>
+          <button type="button" className="w-full block" onClick={tap} aria-label={'تایمر ' + m.display}>
+            <div dir="ltr" className={'num font-semibold tracking-[-0.04em] leading-none ' + timerTone(m.p)} style={{ fontSize: 'clamp(4.25rem, 22vw, 6.5rem)' }}>{m.display}</div>
           </button>
-          <div className={'text-xs mt-2 ' + (m.p.phase === PHASES.invalid ? 'text-red-400' : 'text-secondary')} role="status">
-            {m.status}{m.p.phase === PHASES.ready ? '... اولین حرکت شروع می‌کند' : ''}
-          </div>
-          {m.p.phase === PHASES.scrambling && !m.offPath && m.p.remaining[0] && (
-            <p className="text-sm text-secondary mt-1">حرکت جاری <Alg moves={m.p.remaining[0]} className="text-cyan font-bold" />{m.p.remaining[1] && <> · بعدی <Alg moves={m.p.remaining[1]} /></>}</p>
-          )}
-          {m.p.phase === PHASES.freePrep && <button className="mt-3 px-6 py-3 rounded-xl bg-cyan-400 text-slate-900 font-bold" onClick={() => m.practiceApi.armFree()}>آماده‌ام</button>}
-          <div className="flex justify-center"><ConnectCta m={m} className="mt-3" /></div>
-        </div>
-
-        <div id="cube-visualization" className="relative py-2">
-          <CubeView ref={cube} facelets={previewFacelets(m)} lastMove={m.live.lastMove} moveKey={m.live.moveKey} dim={!m.live.facelets} height={280} />
-          {!m.live.facelets && m.p.scramble && (
-            <div className="absolute bottom-0 left-0 right-0 flex justify-center">
-              <span className="text-[9px] bg-black/40 px-2 py-0.5 rounded border border-white/5 text-secondary">پیش‌نمایش اسکرَمبل</span>
-            </div>
-          )}
-          <button className="absolute top-2 right-0 w-11 h-11 rounded-xl border border-white/15 bg-white/5 flex justify-center items-center text-secondary" aria-label="بازنشانی نما؛ بدون تغییر مکعب" title="بازنشانی نمای دوربین" onClick={() => cube.current?.resetCamera()}>
-            <i className="fa-solid fa-camera-rotate"></i>
-          </button>
-        </div>
-
-        <div>
-          <button className="w-full mt-3 py-3 px-4 rounded-xl border border-white/15 bg-white/5 text-sm font-medium" disabled={m.p.phase === PHASES.solving}
-            onClick={() => (m.p.mode === 'free' ? m.newScramble() : m.practiceApi.startFree())}>{m.p.mode === 'free' ? 'اسکرَمبل هدایت‌شده' : 'تمرین آزاد'}</button>
-        </div>
+          {m.p.phase === PHASES.ready && <p className="text-sm text-muted mt-3">اولین حرکت، زمان‌گیری را شروع می‌کند</p>}
+          {m.p.phase === PHASES.noCube && m.sub && <p className="text-sm text-muted mt-3 px-4 leading-7">{m.sub}</p>}
+          <CurrentMove m={m} className="mt-4" />
+          {m.p.phase === PHASES.freePrep && <button className="btn-primary btn-lg mt-4" onClick={() => m.practiceApi.armFree()}>آماده‌ام</button>}
+          <div className="flex justify-center"><ConnectCta m={m} className="mt-5" /></div>
+        </section>
 
         {m.p.phase === PHASES.inspecting && (
-          <div className="cyber-panel p-4 rounded-xl border-dashed">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-bold text-cyan">حالت بازرسی</span>
-              <span className="text-xs font-tabular">{m.inspectionText}</span>
+          <div className="card p-4 border-warn/30 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-warn">حالت بازرسی</div>
+              <div className="text-xs text-muted mt-0.5">اولین حرکت حل زمان‌گیری را شروع می‌کند.</div>
             </div>
-            <div className="text-[10px] text-secondary">اولین حرکت حل زمان‌گیری را شروع می‌کند.</div>
+            <span className="num text-2xl font-semibold text-warn">{m.inspectionText}</span>
           </div>
         )}
         {m.p.phase === PHASES.solving && (
-          <div className="cyber-panel p-4 rounded-xl border-cyan">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-bold text-green-400">در حال حل</span>
-              <span className="text-xs font-tabular text-green-400">{m.display}</span>
+          <div className="card p-4 border-accent/30 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-semibold text-accent">در حال حل</div>
+              <div className="text-xs text-muted mt-0.5">وضعیت دریافت: معتبر</div>
             </div>
-            <div className="flex justify-between mt-2">
-              <span className="text-[10px] text-secondary">حرکت دریافت‌شده: {fa(m.p.moves.length)}</span>
-              <span className="text-[10px] text-secondary">وضعیت دریافت: معتبر</span>
-            </div>
+            <div className="text-xs text-muted"><span className="num text-base text-ink font-semibold">{m.p.moves.length}</span> حرکت</div>
           </div>
         )}
         {m.p.phase === PHASES.done && m.last && (
-          <div className="cyber-panel p-4 rounded-xl border-white/20">
-            <div className="flex justify-between items-center">
+          <div className="card p-4">
+            <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold">پایان معتبر</div>
-                <div className="text-[10px] text-secondary">{sv.text}</div>
+                <div className="text-sm font-semibold">پایان معتبر</div>
+                <div className={'text-xs mt-0.5 ' + sv.tone}>{sv.text}</div>
               </div>
-              <div className="text-right">
-                <div className="text-xl font-tabular font-bold text-white">{resultText(m.last)}</div>
-                <div className="text-[10px] text-secondary">حل همین جلسه</div>
-              </div>
+              <div className="num text-2xl font-semibold">{resultText(m.last)}</div>
             </div>
-            <GoalLine m={m} className="text-[11px] mt-2" />
+            <GoalLine m={m} className="text-xs mt-2" />
             <SaveError m={m} />
             <ResultActions m={m} compact />
           </div>
         )}
         <InvalidBox m={m} compact />
 
-        <div id="stats-summary" className="cyber-panel rounded-2xl p-4 grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <div className="text-[10px] text-secondary">جلسه فعلی</div>
-            <button className="text-sm font-bold flex items-center gap-1 min-h-0 min-w-0" onClick={() => setPick(true)}>
-              <i className="fa-solid fa-moon text-purple-400 text-xs"></i>
-              {m.session?.name || 'جلسهٔ تازه'}
+        <section id="cube-visualization" className="card overflow-hidden">
+          <CubePanel m={m} cube={cube} height={300} />
+        </section>
+
+        <ModeSwitch m={m} className="w-full [&>button]:flex-1 [&>button]:justify-center [&>button]:h-10" />
+
+        <section id="stats-summary" className="card p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <button className="min-w-0 text-right" onClick={() => setPick(true)}>
+              <div className="eyebrow">جلسهٔ فعلی · <span className="num">{valid.length}</span> حل</div>
+              <div className="text-sm font-semibold truncate flex items-center gap-1.5">{m.session?.name || 'جلسهٔ تازه'}<i className="fa-solid fa-chevron-down text-[10px] text-faint"></i></div>
             </button>
+            <a href="#/stats" className="btn-ghost btn-sm -me-2">آمار<i className="fa-solid fa-chevron-left text-[10px]"></i></a>
           </div>
-          <div className="space-y-1 text-left" dir="ltr">
-            <div className="text-[10px] text-secondary text-right">خلاصه ({fa(valid.length)} حل)</div>
-            <div className="flex justify-end gap-3 text-xs">
-              <div className="text-secondary">بهترین <span className="text-white font-tabular">{best ? resultText(best) : '—'}</span></div>
-              <div className="text-secondary">ao5 <span className="text-cyan font-tabular">{ao5 == null ? '—' : msText(ao5)}</span></div>
-            </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Stat label="بهترین" value={best ? resultText(best) : '—'} tone={best ? 'text-ok' : ''} compact />
+            <Stat label="ao5" value={ao5 == null ? null : msText(ao5)} compact />
+            <Stat label="ao12" value={ao12 == null ? null : msText(ao12)} compact />
           </div>
-          <div className="col-span-2 pt-2 border-t border-white/5 flex justify-between items-center">
-            <div className="text-xs text-secondary">ao12: {ao12 == null ? <span className="text-white/40 italic text-[10px]">داده کافی نیست</span> : <span className="text-white font-tabular">{msText(ao12)}</span>}</div>
-            <a href="#/stats" className="text-xs text-cyan hover:underline">تاریخچه و آمار <i className="fa-solid fa-chevron-left text-[10px] mr-1"></i></a>
-          </div>
-        </div>
-        <p className="text-xs text-secondary py-2">زمان بر پایهٔ دریافت حرکت در مرورگر است؛ ادعای تایمر مسابقه‌ای ندارد.</p>
+        </section>
+        <p className="text-xs text-faint leading-6 pb-2">زمان بر پایهٔ دریافت حرکت در مرورگر است؛ ادعای تایمر مسابقه‌ای ندارد.</p>
       </main>
       <MobileNav route={route} />
       <SessionPicker m={m} open={pick} onClose={() => setPick(false)} />

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fa, msText } from '../app/format.js';
 
-// Solve-time trend: cyan spline of counted solves (DNF leaves a gap) and a
-// thin purple rolling ao5 when there are at least five solves.
+// Solve-time trend: accent spline of counted solves (DNF leaves a gap) and a
+// thin green rolling ao5 when there are at least five solves.
 function spline(pts) {
   if (pts.length < 2) return '';
   let d = `M${pts[0][0]},${pts[0][1]}`;
@@ -17,7 +17,16 @@ function spline(pts) {
 
 export default function TrendChart({ points, ao5 = [], height = 400, compact = false }) {
   const [hover, setHover] = useState(null);
-  const W = 800, H = height, pad = { l: compact ? 34 : 48, r: 16, t: 16, b: compact ? 28 : 40 };
+  // Match the viewBox to the real width so dots stay round.
+  const box = useRef(null);
+  const [width, setWidth] = useState(800);
+  useEffect(() => {
+    if (!box.current) return undefined;
+    const ro = new ResizeObserver(([e]) => setWidth(Math.max(200, Math.round(e.contentRect.width))));
+    ro.observe(box.current);
+    return () => ro.disconnect();
+  }, []);
+  const W = width, H = height, pad = { l: compact ? 34 : 48, r: 16, t: 16, b: compact ? 28 : 40 };
   const finite = points.filter((p) => Number.isFinite(p.ms));
   const geo = useMemo(() => {
     if (!finite.length) return null;
@@ -32,7 +41,7 @@ export default function TrendChart({ points, ao5 = [], height = 400, compact = f
     const step = (hi - lo) / 5 > 10 ? 10 : 5;
     for (let v = lo; v <= hi + 0.001; v += step) ticks.push(v);
     return { x, y, lo, hi, ticks, n };
-  }, [points, finite.length, H]);
+  }, [points, finite.length, H, W]);
 
   if (!geo) return null;
   // Segments break at DNF.
@@ -51,17 +60,17 @@ export default function TrendChart({ points, ao5 = [], height = 400, compact = f
   const xEvery = Math.max(1, Math.ceil(geo.n / (compact ? 6 : 10)));
 
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div ref={box} className="relative w-full" style={{ height }}>
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-full" role="img" aria-label={'نمودار روند ' + fa(points.length) + ' حل'}>
         {geo.ticks.map((t) => (
           <g key={t}>
-            <line x1={pad.l} x2={W - pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke="#1e293b" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            <line x1={pad.l} x2={W - pad.r} y1={geo.y(t)} y2={geo.y(t)} stroke="rgb(var(--line))" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
           </g>
         ))}
-        {aoSegs.map((s, i) => <path key={'a' + i} d={spline(s)} fill="none" stroke="#a855f7" strokeWidth="2" strokeDasharray="6 5" vectorEffect="non-scaling-stroke" opacity="0.8" />)}
-        {segs.map((s, i) => <path key={i} d={spline(s)} fill="none" stroke="#22d3ee" strokeWidth="3" vectorEffect="non-scaling-stroke" />)}
+        {aoSegs.map((s, i) => <path key={'a' + i} d={spline(s)} fill="none" stroke="rgb(var(--ok))" strokeWidth="2" vectorEffect="non-scaling-stroke" opacity="0.9" />)}
+        {segs.map((s, i) => <path key={i} d={spline(s)} fill="none" stroke="rgb(var(--accent))" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />)}
         {points.map((p, i) => Number.isFinite(p.ms) && (
-          <circle key={i} cx={geo.x(i)} cy={geo.y(p.ms / 1000)} r={hover === i ? 7 : compact ? 3.5 : 5} fill="#22d3ee" vectorEffect="non-scaling-stroke" />
+          <circle key={i} cx={geo.x(i)} cy={geo.y(p.ms / 1000)} r={hover === i ? 6 : compact ? 3 : 4} fill="rgb(var(--surface))" stroke="rgb(var(--accent))" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         ))}
         {points.map((_, i) => (
           <rect key={'h' + i} x={geo.x(i) - (W / Math.max(points.length, 1)) / 2} y={0} width={W / Math.max(points.length, 1)} height={H} fill="transparent"
@@ -70,16 +79,16 @@ export default function TrendChart({ points, ao5 = [], height = 400, compact = f
       </svg>
       {/* Axis labels as HTML so they stay crisp and unscaled. */}
       {geo.ticks.map((t) => (
-        <span key={t} className="absolute text-[10px] text-slate-500" style={{ left: 0, top: `calc(${(geo.y(t) / H) * 100}% - 8px)`, width: pad.l - 8, textAlign: 'right' }} dir="ltr">{t}</span>
+        <span key={t} className="absolute text-[10px] text-faint num" style={{ left: 0, top: `calc(${(geo.y(t) / H) * 100}% - 8px)`, width: pad.l - 8, textAlign: 'right' }} dir="ltr">{t}</span>
       ))}
       {points.map((p, i) => (i % xEvery === 0 || i === points.length - 1) && (
-        <span key={i} className="absolute text-[10px] text-slate-500" style={{ left: `calc(${(geo.x(i) / W) * 100}% - 12px)`, bottom: 4, width: 24, textAlign: 'center' }} dir="ltr">{i + 1}</span>
+        <span key={i} className="absolute text-[10px] text-faint num" style={{ left: `calc(${(geo.x(i) / W) * 100}% - 12px)`, bottom: 4, width: 24, textAlign: 'center' }} dir="ltr">{i + 1}</span>
       ))}
       {hover != null && (
-        <div className="absolute pointer-events-none bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs"
+        <div className="absolute pointer-events-none card bg-raised shadow-lg shadow-black/40 px-2.5 py-1.5 text-xs"
           style={{ left: `calc(${(geo.x(hover) / W) * 100}% + 8px)`, top: 8 }}>
           حل {fa(hover + 1)}: <span dir="ltr" className="font-bold">{msText(points[hover].ms) ?? 'DNF'}</span>
-          {ao5[hover] != null && <span className="block text-purple-300">ao5: <span dir="ltr">{msText(ao5[hover])}</span></span>}
+          {ao5[hover] != null && <span className="block text-ok">ao5: <span dir="ltr">{msText(ao5[hover])}</span></span>}
         </div>
       )}
     </div>

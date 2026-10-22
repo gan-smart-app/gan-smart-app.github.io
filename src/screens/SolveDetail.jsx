@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../app/AppContext.jsx';
 import { moveCount, tps } from '../core/stats.mjs';
 import { useToast, Empty } from '../components/ui.jsx';
-import { fa, faDigits, resultText, dateFa, timeFa } from '../app/format.js';
+import { fa, resultText, dateFa, timeFa } from '../app/format.js';
 import { KIND_LABEL } from './Stats.jsx';
 import { MobileHeader, MobileNav } from '../layout/Shell.jsx';
 import { navigate } from '../app/router.js';
 
-// Solve details (design 09, without replay): penalties, note, delete/restore.
+// Solve details (without replay): penalties, note, delete/restore.
 function useSolveModel(id) {
   const { data, actions } = useApp();
   const solve = data.solves.find((s) => s.id === id) || data.deleted.find((s) => s.id === id);
@@ -23,71 +23,99 @@ function useSolveModel(id) {
   return { solve, number, note, setNote, toast, togglePenalty, remove, actions };
 }
 
-function Metrics({ s, cls, labelCls, valueCls, skipRaw = false }) {
+function badgeOf(s) {
+  if (s.deleted) return ['حذف‌شده', 'border-line text-muted'];
+  if (s.penalty === 'DNF') return ['DNF', 'border-bad/30 bg-bad/10 text-bad'];
+  if (s.penalty === '+2') return ['جریمهٔ +2', 'border-warn/30 bg-warn/10 text-warn'];
+  return ['معتبر', 'border-ok/30 bg-ok/10 text-ok'];
+}
+
+function Metrics({ s }) {
   const mc = moveCount(s), t = tps(s);
+  const items = [
+    ['زمان خام', resultText({ ...s, penalty: null }), true],
+    ['تعداد حرکت', mc == null ? 'نامشخص' : String(mc), mc != null],
+    ['TPS', t == null ? 'نامشخص' : t.toFixed(1), t != null],
+    ['نوع تمرین', KIND_LABEL[s.kind] || s.kind, false],
+  ];
+  return items.map(([label, value, num]) => (
+    <div key={label} className="rounded-xl bg-bg border border-line p-3.5">
+      <div className="stat-label mb-1">{label}</div>
+      <div className={num ? 'stat-value !text-base' : 'text-sm font-semibold'}>{value}</div>
+    </div>
+  ));
+}
+
+function Penalties({ r, s }) {
+  if (s.deleted) return null;
+  const on = (p, cls) => (s.penalty === p ? cls : '');
   return (
-    <>
-      {!skipRaw && <div className={cls}><p className={labelCls}>زمان خام</p><p className={valueCls}>{faDigits(resultText({ ...s, penalty: null }))}</p></div>}
-      <div className={cls}><p className={labelCls}>تعداد حرکت</p><p className={valueCls}>{mc == null ? 'نامشخص' : fa(mc)}</p></div>
-      <div className={cls}><p className={labelCls}>TPS</p><p className={valueCls}>{t == null ? 'نامشخص' : faDigits(t.toFixed(1))}</p></div>
-      <div className={cls}><p className={labelCls}>نوع تمرین</p><p className={valueCls}>{KIND_LABEL[s.kind] || s.kind}</p></div>
-    </>
+    <div className="grid grid-cols-2 gap-2">
+      <button aria-pressed={s.penalty === '+2'} className={'btn-secondary ' + on('+2', '!border-warn/50 !text-warn')} onClick={() => r.togglePenalty('+2')}>{s.penalty === '+2' ? 'حذف جریمهٔ +2' : 'ثبت +2'}</button>
+      <button aria-pressed={s.penalty === 'DNF'} className={'btn-secondary ' + on('DNF', '!border-bad/50 !text-bad')} onClick={() => r.togglePenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'ثبت DNF'}</button>
+    </div>
+  );
+}
+
+function Body({ r, mobile }) {
+  const s = r.solve;
+  const [label, cls] = badgeOf(s);
+  return (
+    <div className={mobile ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 gap-6 items-start'}>
+      <section className="card p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <span className="eyebrow">زمان نهایی</span>
+          <span className={'badge ' + cls}>{label}</span>
+        </div>
+        <div className={'num font-semibold tracking-tight leading-none ' + (s.penalty === 'DNF' ? 'text-bad' : 'text-ink') + (mobile ? ' text-5xl' : ' text-6xl')}>{resultText(s)}</div>
+        <Penalties r={r} s={s} />
+        <div className="grid grid-cols-2 gap-2"><Metrics s={s} /></div>
+        <p className="text-xs text-faint leading-6">زمان خام و جریمه جدا نگهداری می‌شوند؛ DNF صفر نیست و در میانگین بدترین حساب می‌شود.</p>
+      </section>
+      <div className="space-y-4">
+        <section className="card p-5">
+          <h3 className="section-title mb-3">اسکرَمبل</h3>
+          {s.scramble
+            ? <div dir="ltr" className="flex flex-wrap gap-1.5">{s.scramble.split(' ').map((t, i) => <span key={i} className="move h-8 min-w-[2.1rem] text-sm bg-raised text-ink">{t}</span>)}</div>
+            : <p className="text-sm text-muted">تمرین آزاد</p>}
+        </section>
+        <section className="card p-5">
+          <h3 className="section-title mb-3">یادداشت</h3>
+          <textarea placeholder="یادداشتی دربارهٔ این حل بنویس…" value={r.note} onChange={(e) => r.setNote(e.target.value)} maxLength={500}
+            className="field min-h-[110px]" aria-label="یادداشت دربارهٔ این حل" />
+          <div className="mt-3 flex justify-between items-center gap-3">
+            <span className="text-xs text-faint">زمان بر پایهٔ دریافت حرکت در مرورگر است.</span>
+            <button className="btn-secondary btn-sm" disabled={r.note === (s.note || '')} onClick={() => r.actions.updateSolve(s.id, { note: r.note })}>ذخیرهٔ یادداشت</button>
+          </div>
+        </section>
+        {mobile && (s.deleted
+          ? <button className="btn-secondary w-full" onClick={() => r.actions.restoreSolve(s.id)}>بازگردانی حل</button>
+          : <button className="btn-danger w-full" onClick={r.remove}><i className="fa-regular fa-trash-can"></i>حذف حل</button>)}
+      </div>
+    </div>
   );
 }
 
 function Desktop({ id }) {
   const r = useSolveModel(id);
-  if (!r.solve) return <main className="p-8"><Empty icon="fa-magnifying-glass" title="این حل پیدا نشد" text="ممکن است هنوز از دستگاه دیگر همگام نشده باشد." action={<a href="#/stats" className="text-cyan-300">بازگشت به آمار</a>} /></main>;
+  const back = () => (history.length > 1 ? history.back() : navigate('stats'));
+  if (!r.solve) return <main className="w-full max-w-4xl mx-auto px-6 py-10"><Empty icon="fa-magnifying-glass" title="این حل پیدا نشد" text="ممکن است هنوز از دستگاه دیگر همگام نشده باشد." action={<a href="#/stats" className="btn-secondary">بازگشت به آمار</a>} /></main>;
   const s = r.solve;
   return (
     <>
-      <nav id="header" className="h-16 border-b border-slate-800 glass px-8 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-4">
-          <button className="text-slate-400 hover:text-white" aria-label="بازگشت" title="بازگشت" onClick={() => (history.length > 1 ? history.back() : navigate('stats'))}><i className="fa-solid fa-arrow-right"></i></button>
-          <div className="h-6 w-px bg-slate-700"></div>
-          <h1 className="font-bold">جزئیات حل شماره {fa(r.number || '')}</h1>
-          <span className="text-xs text-slate-500">{dateFa(s.createdAt)} · {timeFa(s.createdAt)}</span>
+      <nav id="header" className="sticky top-0 z-50 h-14 border-b border-line bg-bg/85 backdrop-blur-md">
+        <div className="h-full max-w-4xl mx-auto px-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <button className="icon-btn" aria-label="بازگشت" title="بازگشت" onClick={back}><i className="fa-solid fa-arrow-right"></i></button>
+            <h1 className="font-semibold">حل شمارهٔ {fa(r.number || '')}</h1>
+            <span className="text-xs text-faint">{dateFa(s.createdAt)} · {timeFa(s.createdAt)}</span>
+          </div>
+          {s.deleted
+            ? <button className="btn-secondary btn-sm" onClick={() => r.actions.restoreSolve(s.id)}>بازگردانی حل</button>
+            : <button className="btn-danger btn-sm" onClick={r.remove}><i className="fa-regular fa-trash-can"></i>حذف حل</button>}
         </div>
-        {s.deleted
-          ? <button className="bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-4 py-1.5 rounded-lg text-xs font-bold" onClick={() => r.actions.restoreSolve(s.id)}>بازگردانی حل</button>
-          : <button className="bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-red-500/20 transition-all" onClick={r.remove}>حذف حل</button>}
       </nav>
-      <main className="p-8 max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-        <section className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 text-center relative overflow-hidden">
-          <div className={'absolute top-0 right-0 px-4 py-1 text-[10px] font-bold rounded-bl-xl ' + (s.deleted ? 'bg-slate-500/20 text-slate-300' : s.penalty === 'DNF' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400')}>
-            {s.deleted ? 'حذف‌شده' : s.penalty === 'DNF' ? 'DNF' : 'معتبر'}
-          </div>
-          <p className="text-slate-500 text-sm mb-2 font-bold">زمان نهایی</p>
-          <h2 className="text-6xl font-bold mb-6">{faDigits(resultText(s))}</h2>
-          {!s.deleted && (
-            <div className="flex gap-2 justify-center mb-8">
-              <button aria-pressed={s.penalty === '+2'} className={'flex-1 bg-slate-900 border py-2 rounded-xl text-xs font-bold transition-all ' + (s.penalty === '+2' ? 'border-yellow-400 text-yellow-300' : 'border-slate-700 text-slate-400 hover:border-yellow-400')} onClick={() => r.togglePenalty('+2')}>{s.penalty === '+2' ? 'حذف جریمه +2' : '+2'}</button>
-              <button aria-pressed={s.penalty === 'DNF'} className={'flex-1 bg-slate-900 border py-2 rounded-xl text-xs font-bold transition-all ' + (s.penalty === 'DNF' ? 'border-red-500 text-red-400' : 'border-slate-700 text-slate-400 hover:border-red-500')} onClick={() => r.togglePenalty('DNF')}>{s.penalty === 'DNF' ? 'لغو DNF' : 'DNF'}</button>
-            </div>
-          )}
-          <div className="grid grid-cols-2 gap-4 text-right">
-            <Metrics s={s} cls="bg-slate-900/50 p-3 rounded-xl border border-slate-800" labelCls="text-[10px] text-slate-500 mb-1" valueCls="text-sm font-bold" />
-          </div>
-          <p className="text-[10px] text-slate-500 mt-4">زمان خام و جریمه جدا نگهداری می‌شوند؛ DNF صفر نیست و در میانگین بدترین حساب می‌شود.</p>
-        </section>
-        <div className="space-y-8">
-          <section className="bg-slate-800/50 border border-slate-700 rounded-3xl p-6">
-            <h3 className="font-bold text-sm mb-4">اسکرَمبل (Scramble)</h3>
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-              <code className="move-font text-xs text-accent-cyan leading-relaxed block text-center">{s.scramble || 'تمرین آزاد'}</code>
-            </div>
-          </section>
-          <section className="bg-slate-800/50 border border-slate-700 rounded-3xl p-6">
-            <h3 className="font-bold text-sm mb-4">یادداشت</h3>
-            <textarea placeholder="یادداشتی درباره این حل بنویسید..." value={r.note} onChange={(e) => r.setNote(e.target.value)} maxLength={500}
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 focus:outline-none focus:border-accent-cyan min-h-[100px]" aria-label="یادداشت درباره این حل" />
-            <div className="mt-4 flex justify-between items-center">
-              <span className="text-[10px] text-slate-500">زمان بر پایهٔ دریافت حرکت در مرورگر است.</span>
-              <button className="text-xs text-accent-cyan font-bold disabled:opacity-40" disabled={r.note === (s.note || '')} onClick={() => r.actions.updateSolve(s.id, { note: r.note })}>ذخیره یادداشت</button>
-            </div>
-          </section>
-        </div>
-      </main>
+      <main className="w-full max-w-4xl mx-auto px-6 py-8"><Body r={r} /></main>
       {r.toast}
     </>
   );
@@ -95,43 +123,11 @@ function Desktop({ id }) {
 
 function Mobile({ id }) {
   const r = useSolveModel(id);
-  if (!r.solve) return <div className="mob"><MobileHeader title="جزئیات حل" back="#/stats" /><main className="mt-20 px-4"><Empty title="این حل پیدا نشد" /></main><MobileNav route="stats" /></div>;
-  const s = r.solve;
+  if (!r.solve) return <div className="mob-page"><MobileHeader title="جزئیات حل" back="#/stats" end={null} /><main className="px-4 pt-4"><Empty title="این حل پیدا نشد" /></main><MobileNav route="stats" /></div>;
   return (
-    <div className="mob">
-      <MobileHeader title={'جزئیات حل #' + fa(r.number)} back="#/stats" />
-      <main className="mt-16 px-4 space-y-6 pt-2">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="cyber-panel p-4 rounded-xl space-y-1">
-            <div className="text-[9px] text-secondary">زمان خام</div>
-            <div className="font-tabular text-xl">{resultText({ ...s, penalty: null })}</div>
-          </div>
-          <div className={'cyber-panel p-4 rounded-xl space-y-1 ' + (s.penalty ? 'border-red-500/20' : '')}>
-            <div className={'text-[9px] ' + (s.penalty ? 'text-red-400' : 'text-secondary')}>{s.penalty ? 'جریمه' : 'نتیجهٔ نهایی'}</div>
-            <div className={'font-tabular text-xl ' + (s.penalty ? 'text-red-400' : '')}>{s.penalty === '+2' ? '+2.00' : s.penalty === 'DNF' ? 'DNF' : resultText(s)}</div>
-          </div>
-        </div>
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <Metrics s={s} skipRaw cls="cyber-panel p-2 rounded-xl" labelCls="text-[9px] text-secondary" valueCls="text-xs font-bold" />
-        </div>
-        <div className="cyber-panel p-4 rounded-xl space-y-3">
-          <div className="text-[9px] text-secondary">اسکرَمبل</div>
-          <div className="font-mono text-[11px] leading-relaxed text-cyan" dir="ltr">{s.scramble || 'تمرین آزاد'}</div>
-        </div>
-        {!s.deleted && (
-          <div className="grid grid-cols-2 gap-3">
-            <button className={'py-3 rounded-xl text-xs border ' + (s.penalty === '+2' ? 'border-yellow-400 text-yellow-300' : 'border-white/10 bg-white/5')} onClick={() => r.togglePenalty('+2')}>{s.penalty === '+2' ? 'حذف +2' : 'ثبت +2'}</button>
-            <button className={'py-3 rounded-xl text-xs border ' + (s.penalty === 'DNF' ? 'border-red-400 text-red-300' : 'border-white/10 bg-white/5')} onClick={() => r.togglePenalty('DNF')}>{s.penalty === 'DNF' ? 'حذف DNF' : 'ثبت DNF'}</button>
-          </div>
-        )}
-        <textarea aria-label="یادداشت همین حل" placeholder="یادداشت دربارهٔ حل…" className="w-full cyber-panel p-4 rounded-xl min-h-[110px]" value={r.note} onChange={(e) => r.setNote(e.target.value)} maxLength={500} />
-        <div className="flex gap-3">
-          {s.deleted
-            ? <button className="flex-1 py-3 bg-cyan-400/10 text-cyan border border-cyan-400/30 rounded-xl text-xs" onClick={() => r.actions.restoreSolve(s.id)}>بازگردانی</button>
-            : <button className="flex-1 py-3 bg-red-500/10 text-red-400 border border-red-500/30 rounded-xl text-xs" onClick={r.remove}>حذف حل</button>}
-          <button className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-xs disabled:opacity-40" disabled={r.note === (s.note || '')} onClick={() => r.actions.updateSolve(s.id, { note: r.note })}>ذخیره یادداشت</button>
-        </div>
-      </main>
+    <div className="mob-page">
+      <MobileHeader title={'حل #' + fa(r.number)} back="#/stats" end={<span className="text-xs text-faint pe-2">{dateFa(r.solve.createdAt)} · {timeFa(r.solve.createdAt)}</span>} />
+      <main className="px-4 pt-4 pb-2"><Body r={r} mobile /></main>
       <MobileNav route="stats" />
       {r.toast}
     </div>
