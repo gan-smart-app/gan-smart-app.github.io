@@ -49,8 +49,9 @@
       "sha256": "ec8b39e9fee34fd7e8cc81e49860b16712cbf5e23605cb384eb033353592ebc2"
     },
     "source-v15/test-legacy.mjs": {
-      "size_bytes": 9323,
-      "sha256": "96b6d505df8b7ed744f764426c25b154e07fcdbd1ae3a3fa7f05334aed6057af"
+      "size_bytes": 9418,
+      "sha256": "c4ed87a2ec2c08ad71bfc57dd1c652a687bfe5a8724a14655dd9d5bec6cf1891",
+      "local_change": "2026-10-24: late-read check waits for a regular poll first, so it holds at the 100 ms poll interval"
     }
   }
 }
