@@ -97,6 +97,12 @@ export class Practice {
     this.model = null;
     this.planToken++;
     const p = this.s.phase;
+    if (p === PHASES.solving && reason === 'sync-lost') {
+      // Fast turning overflowed the device's move history. The timing is still
+      // sound: keep the clock running and follow the snapshot that comes next.
+      this.s.movesComplete = false;
+      return this.onChange(this.s);
+    }
     if (p === PHASES.solving || p === PHASES.inspecting || p === PHASES.ready) {
       this.update({
         phase: PHASES.invalid,

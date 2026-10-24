@@ -253,7 +253,7 @@ export class CubeLink {
         this.flushBatch();
         this.record('sync-lost');
         this.emit('invalidate', { reason: 'sync-lost' });
-        this.set({ message: 'بیش از شش حرکت بین دو خواندن از دست رفت؛ وضعیت دوباره خوانده می‌شود و حل جاری لغو شد.' });
+        this.set({ message: 'بیش از شش حرکت بین دو خواندن رسید؛ وضعیت روبیک دوباره خوانده شد. تایمر حل جاری ادامه دارد، ولی فهرست حرکت‌هایش کامل نیست.' });
         break;
       case 'CONNECTION_DIAGNOSTIC':
         this.record('diagnostic', e.reason);

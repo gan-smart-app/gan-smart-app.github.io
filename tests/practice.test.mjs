@@ -60,14 +60,14 @@ test('solve: first move starts, solved stops, result carries moves and raw time'
   assert.equal(results[0].startFacelets, toFacelets(stateFromAlg(scramble)));
 });
 
-test('sync loss during a solve → invalid, no result; resync does not continue it', () => {
+test('link pause during a solve → invalid, no result; resync does not continue it', () => {
   const { p, results, at } = make();
   p.setModel(SOLVED_FACELETS);
   p.startScramble(scramble);
   for (const m of scramble.split(' ')) p.move(m, at(), 1);
   p.move('R', at(), 2);
   assert.equal(p.state.phase, PHASES.solving);
-  p.invalidate('sync-lost');
+  p.invalidate('paused:link-lost');
   assert.equal(p.state.phase, PHASES.invalid);
   p.setModel(SOLVED_FACELETS);
   p.move('R', at(), 3);
@@ -145,5 +145,25 @@ test('solved snapshot during a solve stops the timer even if moves were missed',
   assert.equal(p.state.phase, PHASES.done);
   assert.equal(results[0].rawMs, 2500);
   assert.equal(results[0].stop, 'auto');
+  assert.equal(results[0].movesComplete, false);
+});
+
+test('sync loss during a fast solve keeps the timer running and follows the next snapshot', () => {
+  const { p, results, tick, at } = make();
+  p.setModel(SOLVED_FACELETS);
+  p.startScramble(scramble);
+  for (const m of scramble.split(' ')) p.move(m, at(), 1);
+  p.move('R', at(), 2);
+  tick(1000);
+  p.invalidate('sync-lost');
+  assert.equal(p.state.phase, PHASES.solving);
+  p.setModel(toFacelets(stateFromAlg(scramble + " R U")));
+  assert.equal(p.state.phase, PHASES.solving);
+  p.move("U'", at(), 3);
+  tick(2000);
+  p.invalidate('sync-lost');
+  p.setModel(SOLVED_FACELETS);
+  assert.equal(p.state.phase, PHASES.done);
+  assert.equal(results[0].rawMs, 3000);
   assert.equal(results[0].movesComplete, false);
 });

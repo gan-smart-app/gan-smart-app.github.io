@@ -25,7 +25,8 @@
     },
     "source-v15/dist/legacy-cube.js": {
       "size_bytes": 15662,
-      "sha256": "37ba97dd53e7d78452e021ad5afc0b3149571723d3272425fe997a8bcb944d29"
+      "sha256": "e25b0cc295b3bc6e22b8e857f222a3e78d1ec6e9df92407057319556cb253a42",
+      "local_change": "2026-10-24: LEGACY_POLL_MS 500 -> 100 so fast solving does not overflow the 6-move history"
     },
     "source-v15/dist/recovery-core.js": {
       "size_bytes": 3526,

@@ -1,5 +1,5 @@
 import {AES} from './gan-driver.js?v=15';
-export const LEGACY_POLL_MS=500;
+export const LEGACY_POLL_MS=100;
 const uuid=n=>'0000'+n+'-0000-1000-8000-00805f9b34fb';
 const KEYS=[[0xc6,0xca,0x15,0xdf,0x4f,0x6e,0x13,0xb6,0x77,0x0d,0xe6,0x59,0x3a,0xaf,0xba,0xa2],[0x43,0xe2,0x5b,0xd6,0x7d,0xdc,0x78,0xd8,0x07,0x60,0xa3,0xda,0x82,0x3c,0x01,0xf1]];
 export function legacyKey(version,hardware){if(version.length<3||version[0]!==1||version[1]>1||hardware.length<6)throw new Error('نسخه پروتکل قدیمی پشتیبانی نمی‌شود.');const key=Uint8Array.from(KEYS[version[1]]);for(let i=0;i<6;i++)key[i]=(key[i]+hardware[5-i])&255;return key;}
