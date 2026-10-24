@@ -45,6 +45,7 @@ export class Practice {
       inspectionEnabled: false,
       penalty: null,
       moves: [],
+      movesComplete: true,
       result: null,
       invalidReason: null,
       message: '',
@@ -69,6 +70,7 @@ export class Practice {
   setModel(facelets) {
     const st = fromFacelets(facelets);
     if (!st) return;
+    const tracked = this.model;
     this.model = st;
     const p = this.s.phase;
     if (p === PHASES.noCube) {
@@ -77,9 +79,11 @@ export class Practice {
     } else if (p === PHASES.scrambling || p === PHASES.planning) {
       this.startScramble(this.s.scramble);
     } else if (p === PHASES.solving) {
-      // A snapshot that disagrees with the tracked solve means moves were not seen.
-      if (!statesEqual(st, this.model)) this.invalidate('resync');
-      this.model = st;
+      // A snapshot that disagrees with the tracked solve means moves were not
+      // seen: follow the real cube so a physically solved cube still stops the timer.
+      if (tracked && statesEqual(st, tracked)) return;
+      this.s.movesComplete = false;
+      this.checkSolved(this.now());
     } else if (p === PHASES.ready || p === PHASES.inspecting) {
       // A fresh snapshot while waiting must still match the target.
       if (this.s.mode === 'scramble' && !statesEqual(st, this.s.target)) this.startScramble(this.s.scramble);
@@ -182,7 +186,7 @@ export class Practice {
     if (p === PHASES.scrambling) return this.scrambleStep(move);
     if (p === PHASES.ready || p === PHASES.inspecting) {
       const penalty = p === PHASES.inspecting ? this.inspectionPenalty(at) : null;
-      this.update({ phase: PHASES.solving, startAt: at, penalty, moves: [{ m: move, t: 0, b: batchId }] });
+      this.update({ phase: PHASES.solving, startAt: at, penalty, movesComplete: true, moves: [{ m: move, t: 0, b: batchId }] });
       return this.checkSolved(at);
     }
     if (p === PHASES.solving) {
@@ -212,6 +216,18 @@ export class Practice {
 
   checkSolved(at) {
     if (!isSolved(this.model)) return this.onChange(this.s);
+    this.finish(at);
+  }
+
+  // The user stops the timer by hand: the app model missed moves or drifted
+  // from the real cube, so the physical cube is solved but the model is not.
+  stop(at = this.now()) {
+    if (this.s.phase !== PHASES.solving) return false;
+    this.finish(at, 'manual');
+    return true;
+  }
+
+  finish(at, stop = 'auto') {
     const rawMs = Math.max(0, Math.round(at - this.s.startAt));
     const result = {
       rawMs,
@@ -220,6 +236,8 @@ export class Practice {
       kind: this.s.mode === 'scramble' ? 'full' : 'free',
       startFacelets: this.s.startFacelets,
       moves: this.s.moves.slice(),
+      movesComplete: stop === 'auto' && this.s.movesComplete,
+      stop,
       timing: 'host-receipt',
     };
     this.update({ phase: PHASES.done, result, startAt: null });

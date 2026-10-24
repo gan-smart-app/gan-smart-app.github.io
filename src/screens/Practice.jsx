@@ -77,12 +77,24 @@ function usePracticeModel() {
     [PHASES.freePrep]: 'روبیک را هر طور می‌خواهی درهم بریز، سپس «آماده‌ام» را بزن. حرکت‌های آماده‌سازی زمان‌گیری نمی‌شوند.',
     [PHASES.ready]: settings.inspectionEnabled ? 'برای بازرسی Space را بزن یا تایمر را لمس کن؛ اولین حرکت حل، زمان‌گیری را آغاز می‌کند.' : 'با اولین حرکت حل، زمان‌گیری آغاز می‌شود',
     [PHASES.inspecting]: 'اولین حرکت تایمر را شروع می‌کند',
-    [PHASES.solving]: 'حل کامل، تایمر را متوقف و نتیجه را ذخیره می‌کند.',
+    [PHASES.solving]: 'حل کامل، تایمر را متوقف می‌کند. اگر روبیک را حل کردی ولی تایمر نایستاد، «حل کردم» را بزن.',
     [PHASES.done]: '',
     [PHASES.invalid]: p.message,
   }[p.phase];
 
+  // Manual stop: the physical cube is solved but the model drifted, so the
+  // timer stops now and the device state is reset to solved to resync it.
+  const stopSolve = () => {
+    if (!practiceApi.stop(performance.now())) return;
+    link.markSolved().catch(() => link.requestState().catch(() => {}));
+  };
+
+  const syncSolved = () => {
+    if (confirm('آیا هر شش وجه روبیک واقعی کاملاً حل شده است؟ مدل برنامه با روبیک حل‌شده همگام می‌شود.')) link.markSolved().catch((e) => alert(e.message));
+  };
+
   const primary = () => {
+    if (p.phase === PHASES.solving) return stopSolve();
     if (p.phase === PHASES.ready && settings.inspectionEnabled) return practiceApi.startInspection();
     if (p.phase === PHASES.freePrep) return practiceApi.armFree();
     if (p.phase === PHASES.done || p.phase === PHASES.invalid) return p.mode === 'free' ? practiceApi.startFree() : newScramble();
@@ -91,7 +103,7 @@ function usePracticeModel() {
 
   return {
     app, p, practiceApi, link, device, live, settings, actions, data, session, counted, sessionSolves, last,
-    display, inspectionText, status, sub, tokens, cursor, offPath, busyScramble, newScramble, primary,
+    display, inspectionText, status, sub, tokens, cursor, offPath, busyScramble, newScramble, primary, stopSolve, syncSolved,
   };
 }
 
@@ -236,6 +248,18 @@ function InvalidBox({ m, compact }) {
   );
 }
 
+function SolvingActions({ m, compact = false }) {
+  if (m.p.phase !== PHASES.solving) return null;
+  return (
+    <div className={'flex flex-wrap gap-2 ' + (compact ? 'mt-4' : 'justify-center mt-6')}>
+      <button className={'btn-primary ' + (compact ? 'btn-sm flex-1' : 'btn-lg')} onClick={m.stopSolve}>
+        <i className="fa-solid fa-stop"></i>حل کردم، توقف{!compact && <kbd className="!bg-white/15 !border-white/20 !text-white">Space</kbd>}
+      </button>
+      <button className={'btn-ghost ' + (compact ? 'btn-sm' : 'btn-lg')} onClick={() => m.practiceApi.cancel()}>لغو{!compact && <kbd>Esc</kbd>}</button>
+    </div>
+  );
+}
+
 function ConnectCta({ m, className = '' }) {
   if (m.p.phase !== PHASES.noCube) return null;
   const busy = m.device.status === 'selecting' || m.device.status === 'connecting';
@@ -303,9 +327,16 @@ function CubePanel({ m, cube, height, className = '' }) {
         <span className={'badge pointer-events-auto ' + (live ? 'border-ok/30 bg-ok/10 text-ok' : 'border-line bg-surface text-muted')}>
           <span className={'dot w-1.5 h-1.5 ' + (live ? 'bg-ok' : 'bg-faint')}></span>{live ? 'وضعیت زنده' : m.p.scramble ? 'پیش‌نمایش اسکرَمبل' : 'مکعب'}
         </span>
+        <span className="flex items-center gap-2">
+        {live && m.p.phase !== PHASES.solving && m.p.phase !== PHASES.inspecting && (
+          <button className="btn-secondary btn-sm pointer-events-auto bg-surface/80" title="اگر رنگ‌های این مدل با روبیک واقعی یکی نیست" onClick={m.syncSolved}>
+            <i className="fa-solid fa-arrows-rotate"></i>روبیکم حل است
+          </button>
+        )}
         <button className="icon-btn pointer-events-auto bg-surface/80 border border-line" title="بازنشانی نمای دوربین" aria-label="بازنشانی نمای دوربین؛ بدون تغییر روبیک" onClick={() => cube.current?.resetCamera()}>
           <i className="fa-solid fa-rotate-left text-sm"></i>
         </button>
+        </span>
       </div>
       <CubeView ref={cube} facelets={previewFacelets(m)} lastMove={m.live.lastMove} moveKey={m.live.moveKey} dim={!live} height={height}
         label="نمای سه‌بعدی روبیک؛ چرخش نما فقط دوربین را تغییر می‌دهد" />
@@ -348,7 +379,7 @@ export function PracticeDesktop() {
   const valid = m.sessionSolves.filter((s) => s.valid);
   const recent = [...valid].slice(-8).reverse();
   const copy = () => m.p.scramble && navigator.clipboard?.writeText(m.p.scramble);
-  const timerClick = () => (m.p.phase === PHASES.ready || m.p.phase === PHASES.freePrep) && m.primary();
+  const timerClick = () => (m.p.phase === PHASES.ready || m.p.phase === PHASES.freePrep || m.p.phase === PHASES.solving) && m.primary();
 
   return (
     <main className="flex-grow w-full max-w-[1400px] mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6">
@@ -392,6 +423,7 @@ export function PracticeDesktop() {
               <CurrentMove m={m} className="mt-5" />
               {m.p.phase === PHASES.freePrep && <button className="btn-primary btn-lg mt-6" onClick={() => m.practiceApi.armFree()}>آماده‌ام<kbd className="!bg-white/15 !border-white/20 !text-white">Space</kbd></button>}
               {m.p.phase === PHASES.solving && <p className="text-sm text-muted mt-5"><span className="num text-ink">{m.p.moves.length}</span> حرکت دریافت‌شده</p>}
+              <SolvingActions m={m} />
               <GoalLine m={m} />
               <SaveError m={m} />
               <ResultActions m={m} />
@@ -511,12 +543,15 @@ export function PracticeMobile({ route }) {
           </div>
         )}
         {m.p.phase === PHASES.solving && (
-          <div className="card p-4 border-accent/30 flex items-center justify-between">
+          <div className="card p-4 border-accent/30">
+            <div className="flex items-center justify-between">
             <div>
               <div className="text-sm font-semibold text-accent">در حال حل</div>
               <div className="text-xs text-muted mt-0.5">وضعیت دریافت: معتبر</div>
             </div>
             <div className="text-xs text-muted"><span className="num text-base text-ink font-semibold">{m.p.moves.length}</span> حرکت</div>
+            </div>
+            <SolvingActions m={m} compact />
           </div>
         )}
         {m.p.phase === PHASES.done && m.last && (

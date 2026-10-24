@@ -153,7 +153,7 @@ export function AppProvider({ children }) {
     const solve = {
       id: uuid(), createdAt: new Date().toISOString(), rawMs: r.rawMs, penalty: r.penalty || null, valid: true,
       source: 'device', kind: r.kind, scramble: r.scramble, startFacelets: r.startFacelets,
-      moves: r.moves.map((x) => ({ m: x.m, t: Math.round(x.t), b: x.b })), movesComplete: true, timing: 'host-receipt', note: '',
+      moves: r.moves.map((x) => ({ m: x.m, t: Math.round(x.t), b: x.b })), movesComplete: r.movesComplete !== false, stop: r.stop || 'auto', timing: 'host-receipt', note: '',
     };
     setLastSolveId(solve.id);
     try {

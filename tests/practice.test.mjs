@@ -116,3 +116,34 @@ test('free practice requires a scrambled cube and does not time preparation', ()
   assert.equal(results.length, 1);
   assert.equal(results[0].kind, 'free');
 });
+
+test('manual stop: physical cube solved but model drifted → timer stops, moves marked incomplete', () => {
+  const { p, results, tick, at } = make();
+  p.setModel(SOLVED_FACELETS);
+  p.startScramble(scramble);
+  for (const m of scramble.split(' ')) p.move(m, at(), 1);
+  tick(1000);
+  p.move('R', at(), 2);
+  tick(4000);
+  assert.equal(p.stop(at()), true);
+  assert.equal(p.state.phase, PHASES.done);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].rawMs, 4000);
+  assert.equal(results[0].stop, 'manual');
+  assert.equal(results[0].movesComplete, false);
+  assert.equal(p.stop(at()), false);
+});
+
+test('solved snapshot during a solve stops the timer even if moves were missed', () => {
+  const { p, results, tick, at } = make();
+  p.setModel(SOLVED_FACELETS);
+  p.startScramble(scramble);
+  for (const m of scramble.split(' ')) p.move(m, at(), 1);
+  p.move('R', at(), 2);
+  tick(2500);
+  p.setModel(SOLVED_FACELETS);
+  assert.equal(p.state.phase, PHASES.done);
+  assert.equal(results[0].rawMs, 2500);
+  assert.equal(results[0].stop, 'auto');
+  assert.equal(results[0].movesComplete, false);
+});
